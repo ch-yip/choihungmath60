@@ -362,7 +362,7 @@
                     <!-- Calculator Interface (Only visible to active player) -->
                     <div id="calc-interface" class="w-full hidden flex-col gap-4">
                         <!-- Equation Display with Clickable Cursor Support -->
-                        <div id="current-equation-html" class="bg-black/40 border border-slate-600 rounded-lg p-4 min-h-[60px] flex items-center justify-start overflow-hidden cursor-text select-none text-2xl font-mono text-gold-400 tracking-wider" onclick="game.handleEquationClick(event)">
+                        <div id="current-equation-html" class="bg-black/40 border border-slate-600 rounded-lg p-4 min-h-[60px] flex items-center justify-start overflow-hidden cursor-text select-none text-2xl font-mono text-gold-400 tracking-wider" onclick="game.handleEquationClick(event)" ontouchend="game.handleEquationClick(event)">
                             <!-- Equation and Cursor will be rendered here dynamically -->
                         </div>
 
@@ -1052,12 +1052,21 @@
             },
             // Fix 3: Handle equation click for cursor
             handleEquationClick: (e) => {
-                // Ignore if clicked on cursor itself
-                if (e.target.classList.contains('equation-cursor')) return;
+                // Prevent duplicate handling if we have both listeners, though unlikely to be an issue here
+                // Simple logic: If we have tokens, find closest.
+                
+                // Determine clientX regardless of input type
+                let clientX;
+                if (e.changedTouches && e.changedTouches.length > 0) {
+                    clientX = e.changedTouches[0].clientX;
+                } else {
+                    clientX = e.clientX;
+                }
 
                 const container = document.getElementById('current-equation-html');
+                if (!container) return;
+                
                 const tokens = Array.from(container.querySelectorAll('.calc-token'));
-                const clickX = e.clientX;
                 
                 // If empty or no tokens, cursor is 0
                 if (tokens.length === 0) {
@@ -1072,7 +1081,7 @@
 
                 // Check distance to "start" (before first token)
                 const firstRect = tokens[0].getBoundingClientRect();
-                const distToStart = Math.abs(clickX - firstRect.left);
+                const distToStart = Math.abs(clientX - firstRect.left);
                 if (distToStart < minDist) {
                     minDist = distToStart;
                     bestIdx = 0;
@@ -1081,7 +1090,7 @@
                 // Check distance to "after" each token
                 tokens.forEach((token, idx) => {
                     const rect = token.getBoundingClientRect();
-                    const distToEnd = Math.abs(clickX - rect.right);
+                    const distToEnd = Math.abs(clientX - rect.right);
                     if (distToEnd < minDist) {
                         minDist = distToEnd;
                         bestIdx = idx + 1;
