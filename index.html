@@ -143,12 +143,21 @@
         /* Cursor Style */
         .equation-cursor {
             display: inline-block;
-            width: 2px;
-            height: 1.2em;
+            width: 3px;
+            height: 1.4em;
             background-color: #facc15;
-            vertical-align: text-bottom;
-            margin: 0 2px;
+            vertical-align: middle;
+            margin: 0 1px;
             animation: cursor-blink 1s step-end infinite;
+            box-shadow: 0 0 5px #facc15;
+        }
+        
+        /* Token style for hit testing */
+        .calc-token {
+            display: inline-block;
+            padding: 0 2px;
+            position: relative;
+            z-index: 10;
         }
     </style>
 </head>
@@ -352,11 +361,9 @@
 
                     <!-- Calculator Interface (Only visible to active player) -->
                     <div id="calc-interface" class="w-full hidden flex-col gap-4">
-                        <!-- Equation Display with Cursor Support -->
-                        <div class="bg-black/40 border border-slate-600 rounded-lg p-4 min-h-[60px] flex items-center justify-end overflow-hidden cursor-text" onclick="document.getElementById('input-hidden').focus()">
-                            <div id="current-equation-html" class="text-2xl font-mono text-gold-400 tracking-wider flex items-center">
-                                <!-- Equation and Cursor will be rendered here -->
-                            </div>
+                        <!-- Equation Display with Clickable Cursor Support -->
+                        <div id="current-equation-html" class="bg-black/40 border border-slate-600 rounded-lg p-4 min-h-[60px] flex items-center justify-start overflow-hidden cursor-text select-none text-2xl font-mono text-gold-400 tracking-wider" onclick="game.handleEquationClick(event)">
+                            <!-- Equation and Cursor will be rendered here dynamically -->
                         </div>
 
                         <!-- Operators & Controls -->
@@ -1042,6 +1049,47 @@
                     cursorPos = newPos;
                     updateCalcState();
                 }
+            },
+            // Fix 3: Handle equation click for cursor
+            handleEquationClick: (e) => {
+                // Ignore if clicked on cursor itself
+                if (e.target.classList.contains('equation-cursor')) return;
+
+                const container = document.getElementById('current-equation-html');
+                const tokens = Array.from(container.querySelectorAll('.calc-token'));
+                const clickX = e.clientX;
+                
+                // If empty or no tokens, cursor is 0
+                if (tokens.length === 0) {
+                    cursorPos = 0;
+                    updateCalcState();
+                    return;
+                }
+
+                // Find closest token position
+                let bestIdx = 0;
+                let minDist = Infinity;
+
+                // Check distance to "start" (before first token)
+                const firstRect = tokens[0].getBoundingClientRect();
+                const distToStart = Math.abs(clickX - firstRect.left);
+                if (distToStart < minDist) {
+                    minDist = distToStart;
+                    bestIdx = 0;
+                }
+
+                // Check distance to "after" each token
+                tokens.forEach((token, idx) => {
+                    const rect = token.getBoundingClientRect();
+                    const distToEnd = Math.abs(clickX - rect.right);
+                    if (distToEnd < minDist) {
+                        minDist = distToEnd;
+                        bestIdx = idx + 1;
+                    }
+                });
+
+                cursorPos = bestIdx;
+                updateCalcState();
             }
         };
 
@@ -1081,8 +1129,7 @@
                 equationHistory.forEach((item, index) => {
                     const span = document.createElement('span');
                     span.innerText = item.val;
-                    if (item.type === 'card') span.className = 'text-yellow-300 font-bold mx-1';
-                    else span.className = 'text-white mx-1';
+                    span.className = 'calc-token ' + (item.type === 'card' ? 'text-yellow-300 font-bold mx-1' : 'text-white mx-1');
                     
                     htmlContainer.appendChild(span);
 
