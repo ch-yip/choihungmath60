@@ -224,8 +224,8 @@
                         <ul class="list-disc list-inside space-y-1">
                             <li>目標: 計算結果為 60</li>
                             <li>A=1, 必須使用所有5張卡牌</li>
-                            <li>先搶答，限時25秒作答</li>
-                            <li>4分獲勝, 0分淘汰</li>
+                            <li>先搶答，限時30秒作答</li>
+                            <li>4分勝出, 0分淘汰</li>
                         </ul>
                     </div>
                     
@@ -302,10 +302,13 @@
                             <!-- Injected via JS -->
                         </div>
 
-                        <!-- Host Control: Next Round -->
-                        <div id="host-controls" class="mt-8 hidden">
+                        <!-- Host Control: Next Round & End Game -->
+                        <div id="host-controls" class="mt-8 hidden flex gap-4">
                             <button id="btn-next-round" class="bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 text-white font-bold py-3 px-8 rounded-full shadow-lg transition animate-pulse text-lg">
                                 下一回合 <i class="fa-solid fa-arrow-right ml-2"></i>
+                            </button>
+                            <button id="btn-terminate-game-overlay" class="bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white font-bold py-3 px-8 rounded-full shadow-lg transition text-lg">
+                                結束遊戲 <i class="fa-solid fa-flag-checkered ml-2"></i>
                             </button>
                         </div>
                     </div>
@@ -351,7 +354,12 @@
                 </div>
 
                 <!-- Right: Game Log / Chat (Optional, but good for context) -->
-                <div class="w-full lg:w-1/4 glass-panel rounded-xl p-4 h-[400px] flex flex-col order-3">
+                <div class="w-full lg:w-1/4 glass-panel rounded-xl p-4 h-[400px] flex flex-col order-3 relative">
+                     <!-- Immediate End Game Button for Host (Always visible in game view) -->
+                    <button id="btn-terminate-game-main" class="hidden w-full mb-4 bg-red-900/80 hover:bg-red-800 border border-red-500 text-red-200 font-bold py-2 px-4 rounded-lg transition text-sm">
+                        <i class="fa-solid fa-power-off mr-2"></i>立即終結遊戲
+                    </button>
+
                     <h3 class="text-slate-400 font-bold mb-2 text-sm uppercase">戰況紀錄</h3>
                     <div id="game-logs" class="flex-grow overflow-y-auto space-y-2 text-sm font-mono custom-scrollbar pr-2">
                         <!-- Logs -->
@@ -605,7 +613,7 @@
                 if (isSomeoneBuzzing) {
                     if (roomState.answerEndTime) {
                         remaining = Math.max(0, Math.ceil((roomState.answerEndTime.toMillis() - now) / 1000));
-                        total = 25;
+                        total = 30; // Updated to 30s
                     }
                 } else {
                     if (roomState.roundEndTime) {
@@ -741,6 +749,17 @@
              }
         });
 
+        // Terminate Game Handler (For both buttons)
+        const terminateGame = async () => {
+            if (!currentRoomId || !roomState) return;
+             if (!confirm("確定要立即結束遊戲嗎？")) return;
+             
+             const roomRef = getRoomRef(currentRoomId);
+             await updateDoc(roomRef, { status: 'finished' });
+        };
+        document.getElementById('btn-terminate-game-main').addEventListener('click', terminateGame);
+        document.getElementById('btn-terminate-game-overlay').addEventListener('click', terminateGame);
+
         // --- Game Logic ---
         async function startNewRound(roomId, roundNum) {
             const cards = [];
@@ -766,11 +785,19 @@
         function renderGame(data) {
             const replayOverlay = document.getElementById('replay-overlay');
             const hostControls = document.getElementById('host-controls');
+            const terminateBtnMain = document.getElementById('btn-terminate-game-main');
+
+            // Host Controls Visibility
+            if (currentUser.uid === data.hostId) {
+                terminateBtnMain.classList.remove('hidden');
+            } else {
+                terminateBtnMain.classList.add('hidden');
+            }
 
             if (data.status === 'replay' && data.lastResult) {
                 replayOverlay.classList.remove('hidden');
                 
-                // Fix 3: Host Controls
+                // Host Controls in Overlay
                 if (currentUser.uid === data.hostId) {
                     hostControls.classList.remove('hidden');
                 } else {
@@ -908,6 +935,14 @@
 
         document.getElementById('btn-buzz').addEventListener('click', async () => {
             if (!currentRoomId || !roomState) return;
+            
+            // Check elimination status (Fix 4)
+            const me = roomState.players.find(p => p.id === currentUser.uid);
+            if (me.status !== 'active') {
+                showToast("你已被淘汰，無法搶答！");
+                return;
+            }
+
             if (roomState.currentBuzzer !== null) return;
 
             const roomRef = getRoomRef(currentRoomId);
@@ -924,7 +959,7 @@
                     if (data.currentBuzzer !== null) throw "Too late"; 
 
                     const future = new Date();
-                    future.setSeconds(future.getSeconds() + 27); 
+                    future.setSeconds(future.getSeconds() + 32); // 30s + 2s buffer (Fix 1)
 
                     transaction.update(roomRef, {
                         currentBuzzer: currentUser.uid,
