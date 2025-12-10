@@ -266,14 +266,14 @@
                     </div>
                 </div>
 
-                <!-- Impossible Button (Updated Fix 3: Brighter + Explanation) -->
+                <!-- Impossible Button (Updated UI: Brighter red, backlight, and updated text) -->
                 <div class="flex flex-col items-center">
-                    <button id="btn-impossible" class="glass-panel rounded-xl p-4 bg-red-900/40 border border-red-500/50 hover:bg-red-900/70 transition flex flex-col items-center justify-center min-w-[140px] shadow-[0_0_15px_rgba(239,68,68,0.4)] hover:shadow-[0_0_25px_rgba(239,68,68,0.7)]">
-                        <i class="fa-solid fa-ban text-2xl text-red-400 mb-1"></i>
-                        <span class="text-sm font-bold text-red-100 uppercase tracking-wider">沒有解</span>
-                        <span id="impossible-votes" class="text-xs text-red-300 mt-1 font-mono">0/0</span>
+                    <button id="btn-impossible" class="glass-panel rounded-xl p-4 bg-red-600 hover:bg-red-500 border border-red-400 text-white transition flex flex-col items-center justify-center min-w-[140px] shadow-[0_0_20px_rgba(239,68,68,0.6)] hover:shadow-[0_0_30px_rgba(239,68,68,0.8)]">
+                        <i class="fa-solid fa-ban text-2xl mb-1"></i>
+                        <span class="text-sm font-bold uppercase tracking-wider">沒有解</span>
+                        <span id="impossible-votes" class="text-xs mt-1 font-mono">0/0</span>
                     </button>
-                    <span class="text-[10px] text-slate-400 mt-2 max-w-[140px] text-center leading-tight">當所有玩家都按「沒有解」按鈕，這個回合便會取消</span>
+                    <span class="text-[12px] text-red-200 mt-2 max-w-[160px] text-center leading-tight font-bold">當所有玩家都按「沒有解」，本回合便會終止</span>
                 </div>
             </div>
 
@@ -428,7 +428,7 @@
         let myCards = []; 
         let usedCardsIndices = [];
         let equationString = "";
-        let equationHistory = []; // Fix 2: Add history stack
+        let equationHistory = []; // Fix: History stack
         let timerInterval = null; 
 
         // --- Auth Guard ---
@@ -998,8 +998,11 @@
                 updateCalcState();
             },
             backspace: () => {
-                equationHistory.pop();
-                updateCalcState(); 
+                // Fix: Strict backspace logic
+                if (equationHistory.length > 0) {
+                    equationHistory.pop();
+                    updateCalcState(); 
+                }
             }
         };
 
