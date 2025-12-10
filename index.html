@@ -240,23 +240,23 @@
             </div>
 
             <div class="flex-grow p-6 flex flex-col md:flex-row gap-6">
-                <!-- Players Grid -->
-                <div class="flex-grow grid grid-cols-1 md:grid-cols-2 gap-4 content-start" id="waiting-player-list">
+                <!-- Players Grid (Optimized Width 2/5) -->
+                <div class="w-full md:w-2/5 grid grid-cols-1 gap-4 content-start custom-scrollbar overflow-y-auto" id="waiting-player-list" style="max-height: 400px;">
                     <!-- Player Cards Injected Here -->
                 </div>
                 
-                <!-- Sidebar Actions (Expanded width for rules) -->
-                <div class="w-full md:w-5/12 flex flex-col justify-end gap-4 border-t md:border-t-0 md:border-l border-white/10 pt-4 md:pt-0 md:pl-6">
+                <!-- Sidebar Actions (Optimized Width 3/5 for long rules) -->
+                <div class="w-full md:w-3/5 flex flex-col justify-end gap-4 border-t md:border-t-0 md:border-l border-white/10 pt-4 md:pt-0 md:pl-6">
                     <div class="bg-slate-800/50 p-4 rounded-lg text-sm text-slate-300">
                         <h4 class="font-bold text-white mb-2 text-lg">規則簡介</h4>
-                        <ul class="list-disc list-inside space-y-2 text-xs md:text-sm text-slate-300 text-left">
+                        <ul class="list-disc list-outside ml-5 space-y-2 text-xs md:text-sm text-slate-300 text-left">
                             <li>每名玩家2分底分，4分勝出，0分淘汰</li>
                             <li>每局勝出者將獲加1分，作答錯誤或限時未能作答扣1分</li>
                             <li>每局將會有5隻卡牌，以運算結果=60為目標</li>
                             <li>玩家必須使用所有5張卡牌</li>
                             <li>不同的卡牌必須使用 加 減 乘 除 及 括弧 連接出一條算式</li>
                             <li>若玩家想作答，必需先按「搶答」按鈕，並限時30秒作答</li>
-                            <li>搶答玩家需以按運算符號鍵及卡牌方式作答</li>
+                            <li>搶答玩家需以 <span class="font-bold text-gold-400">按鍵及按卡牌</span> 方式作答</li>
                         </ul>
                     </div>
                     
@@ -282,7 +282,7 @@
                     <div id="timer-progress" class="absolute left-0 bottom-0 h-1 bg-indigo-400 transition-all duration-1000 z-10" style="width: 100%"></div>
                     
                     <div class="relative z-20 flex items-center gap-4">
-                        <div class="bg-slate-900 rounded-lg px-4 py-2 border border-slate-700 min-w-[120px]">
+                        <div class="bg-slate-900 rounded-lg px-4 py-2 border border-slate-700 min-w-[150px]">
                             <span class="text-xs text-slate-400 uppercase block">Room</span>
                             <!-- Added Room Name Display -->
                             <span id="game-room-name" class="text-lg font-tech font-bold text-gold-400 truncate block">...</span>
