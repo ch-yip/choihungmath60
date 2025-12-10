@@ -301,6 +301,13 @@
                         <div id="replay-player-info" class="mt-8 flex items-center gap-3 text-slate-400">
                             <!-- Injected via JS -->
                         </div>
+
+                        <!-- Host Control: Next Round -->
+                        <div id="host-controls" class="mt-8 hidden">
+                            <button id="btn-next-round" class="bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 text-white font-bold py-3 px-8 rounded-full shadow-lg transition animate-pulse text-lg">
+                                下一回合 <i class="fa-solid fa-arrow-right ml-2"></i>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Cards Area -->
@@ -411,7 +418,7 @@
         let myCards = []; 
         let usedCardsIndices = [];
         let equationString = "";
-        let timerInterval = null;
+        let timerInterval = null; // Used for UI countdown loop
 
         // --- Auth Guard ---
         // 強制在開始前進行身份驗證，防止權限錯誤
@@ -575,17 +582,76 @@
             });
         }
 
+        // --- Timer Loop Logic (Fix 1) ---
+        function startTimerLoop() {
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (!roomState) return;
+                
+                // Only run logic if playing
+                if (roomState.status !== 'playing') {
+                     // For replay or other states, set timer to 0 or static
+                     document.getElementById('main-timer').innerText = "0";
+                     document.getElementById('timer-progress').style.width = "0%";
+                     return;
+                }
+
+                const now = new Date().getTime();
+                let remaining = 0;
+                let total = 60;
+                
+                const isSomeoneBuzzing = roomState.currentBuzzer !== null;
+
+                if (isSomeoneBuzzing) {
+                    if (roomState.answerEndTime) {
+                        remaining = Math.max(0, Math.ceil((roomState.answerEndTime.toMillis() - now) / 1000));
+                        total = 25;
+                    }
+                } else {
+                    if (roomState.roundEndTime) {
+                        remaining = Math.max(0, Math.ceil((roomState.roundEndTime.toMillis() - now) / 1000));
+                        total = 60;
+                    }
+                }
+
+                document.getElementById('main-timer').innerText = remaining;
+                const pct = (remaining / total) * 100;
+                const progressBar = document.getElementById('timer-progress');
+                progressBar.style.width = `${pct}%`;
+                progressBar.className = remaining < 10 
+                    ? "absolute left-0 bottom-0 h-1 bg-red-500 transition-all duration-300 z-10" 
+                    : "absolute left-0 bottom-0 h-1 bg-indigo-400 transition-all duration-300 z-10";
+                
+                // Trigger timeout (Host Only) - Client side check to trigger DB write
+                if (currentUser && roomState.hostId === currentUser.uid && remaining === 0) {
+                     if (isSomeoneBuzzing) {
+                         // To prevent multiple triggers, check if lastResult is null or we are still in playing
+                         // Just call it, handleRoundResult is robust enough or state will change
+                         handleRoundResult('timeout', roomState.currentBuzzer);
+                     } else {
+                         handleRoundResult('impossible', null);
+                     }
+                }
+
+            }, 1000); // Update every second
+        }
+
         // --- Rendering & Game Loop ---
         function renderRoom(data) {
             // View Switching
             if (data.status === 'waiting') {
                 showView('waiting');
                 renderWaitingRoom(data);
+                if (timerInterval) clearInterval(timerInterval);
             } else if (data.status === 'playing' || data.status === 'replay') {
                 showView('game');
                 renderGame(data);
+                // Ensure timer loop is running if playing, but renderGame handles snapshot updates too.
+                // We start the interval once when entering game view.
+                if (!timerInterval) startTimerLoop();
             } else if (data.status === 'finished') {
                 showView('gameover');
+                if (timerInterval) clearInterval(timerInterval);
                 const winner = data.players.reduce((prev, current) => (prev.score > current.score) ? prev : current);
                 document.getElementById('winner-display').innerText = winner.name + " (Score: " + winner.score + ")";
             }
@@ -660,6 +726,21 @@
             startNewRound(currentRoomId, 1);
         });
 
+        document.getElementById('btn-next-round').addEventListener('click', async () => {
+             if (!currentRoomId || !roomState) return;
+             // Host Logic: Check if game should end
+             const winner = roomState.players.find(p => p.score >= 4);
+             const activePlayers = roomState.players.filter(p => p.status === 'active');
+             
+             const roomRef = getRoomRef(currentRoomId);
+
+             if (winner || activePlayers.length <= 1) {
+                 await updateDoc(roomRef, { status: 'finished' });
+             } else {
+                 startNewRound(currentRoomId, roomState.round + 1);
+             }
+        });
+
         // --- Game Logic ---
         async function startNewRound(roomId, roundNum) {
             const cards = [];
@@ -684,12 +765,24 @@
 
         function renderGame(data) {
             const replayOverlay = document.getElementById('replay-overlay');
+            const hostControls = document.getElementById('host-controls');
+
             if (data.status === 'replay' && data.lastResult) {
                 replayOverlay.classList.remove('hidden');
+                
+                // Fix 3: Host Controls
+                if (currentUser.uid === data.hostId) {
+                    hostControls.classList.remove('hidden');
+                } else {
+                    hostControls.classList.add('hidden');
+                }
+
                 playReplay(data);
-                return; 
+                // Don't return here so background game state is still rendered (optional, but looks better if cards are visible behind)
+                // Actually playReplay handles the overlay content. We can let the rest run to update scores etc.
             } else {
                 replayOverlay.classList.add('hidden');
+                hostControls.classList.add('hidden');
             }
 
             const me = data.players.find(p => p.id === currentUser.uid);
@@ -704,35 +797,16 @@
                 ? "text-lg font-bold text-red-400 animate-pulse" 
                 : "text-lg font-bold text-green-400";
 
-            const now = new Date().getTime();
-            let remaining = 0;
-            let total = 60; 
+            // Timer display is now handled primarily by startTimerLoop to ensure smoothness, 
+            // but we can set initial values here to prevent empty flash.
+            // We won't overwrite DOM if loop is running to avoid conflict flickering, 
+            // but loop runs 1s interval. 
+            // Actually, `startTimerLoop` updates the DOM directly. `renderGame` is called on snapshot. 
+            // Let's rely on `startTimerLoop` for the numbers and bar.
 
-            if (isSomeoneBuzzing) {
-                if (data.answerEndTime) {
-                    remaining = Math.max(0, Math.ceil((data.answerEndTime.toMillis() - now) / 1000));
-                    total = 25;
-                }
-            } else {
-                if (data.roundEndTime) {
-                    remaining = Math.max(0, Math.ceil((data.roundEndTime.toMillis() - now) / 1000));
-                    total = 60;
-                }
-            }
-            
-            document.getElementById('main-timer').innerText = remaining;
-            const pct = (remaining / total) * 100;
-            document.getElementById('timer-progress').style.width = `${pct}%`;
-            document.getElementById('timer-progress').className = remaining < 10 
-                ? "absolute left-0 bottom-0 h-1 bg-red-500 transition-all duration-1000 z-10" 
-                : "absolute left-0 bottom-0 h-1 bg-indigo-400 transition-all duration-1000 z-10";
-
-            if (currentUser.uid === data.hostId && remaining === 0 && data.status === 'playing') {
-                if (isSomeoneBuzzing) {
-                    handleRoundResult('timeout', data.currentBuzzer);
-                } else {
-                    handleRoundResult('impossible', null); 
-                }
+            if (currentUser.uid === data.hostId && data.status === 'playing') {
+                 // Double check timeout logic here just in case setInterval lags? 
+                 // Actually setInterval is better for this.
             }
 
             const cardsContainer = document.getElementById('cards-container');
@@ -921,8 +995,9 @@
         }
 
         document.getElementById('btn-submit').addEventListener('click', () => {
+            // Fix 2: Strict Card Usage (Wrong if not 5)
             if (usedCardsIndices.length !== 5) {
-                showToast("必須使用所有5張卡牌!");
+                handleRoundResult('wrong', currentUser.uid, equationString + " (少於5張牌)");
                 return;
             }
             
@@ -967,9 +1042,8 @@
                 }
             }
 
-            const winner = players.find(p => p.score >= 4);
-            const activePlayers = players.filter(p => p.status === 'active');
-            let nextStatus = 'replay';
+            // Note: We don't auto-check winner here for transition anymore.
+            // We just update state to Replay. Host decides next step.
 
             await updateDoc(roomRef, {
                 status: 'replay',
@@ -977,20 +1051,8 @@
                 players: players
             });
             
-            if (currentUser.uid === data.hostId) {
-                setTimeout(async () => {
-                    const rSnap = await getDoc(roomRef);
-                    const rData = rSnap.data();
-                    const win = rData.players.find(p => p.score >= 4);
-                    const active = rData.players.filter(p => p.status === 'active');
-
-                    if (win || active.length <= 1) {
-                         await updateDoc(roomRef, { status: 'finished' });
-                    } else {
-                         startNewRound(currentRoomId, rData.round + 1);
-                    }
-                }, 5000); 
-            }
+            // Fix 3: Removed automatic setTimeout transition.
+            // Host button handles it now.
         }
 
         // --- Replay Animation Logic ---
@@ -1025,6 +1087,12 @@
             eqDiv.innerHTML = '';
             
             const typeTimer = setInterval(() => {
+                // Ensure element still exists (if view switched quickly)
+                if(!document.getElementById('replay-equation')) {
+                    clearInterval(typeTimer);
+                    return;
+                }
+                
                 if (i < textToShow.length) {
                     eqDiv.innerHTML += textToShow.charAt(i);
                     i++;
