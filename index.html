@@ -686,6 +686,9 @@
 
         // --- Rendering & Game Loop ---
         function renderRoom(data) {
+            // Updated to ensure Room Name persists
+            document.getElementById('game-room-name').innerText = currentRoomId;
+
             // Check for Impossible condition inside render to catch all updates
             if (currentUser && data.hostId === currentUser.uid && data.status === 'playing') {
                 const activeCount = data.players.filter(p => p.status === 'active').length;
