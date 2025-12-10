@@ -38,11 +38,16 @@
                     animation: {
                         'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
                         'stamp': 'stamp-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+                        'cursor-blink': 'cursor-blink 1s step-end infinite',
                     },
                     keyframes: {
                         'stamp-in': {
                             '0%': { transform: 'scale(3) rotate(-10deg)', opacity: '0' },
                             '100%': { transform: 'scale(1) rotate(-10deg)', opacity: '1' },
+                        },
+                        'cursor-blink': {
+                            '0%, 100%': { opacity: '1' },
+                            '50%': { opacity: '0' },
                         }
                     }
                 }
@@ -134,6 +139,17 @@
             transform: none;
             opacity: 0.6;
         }
+
+        /* Cursor Style */
+        .equation-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1.2em;
+            background-color: #facc15;
+            vertical-align: text-bottom;
+            margin: 0 2px;
+            animation: cursor-blink 1s step-end infinite;
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -159,7 +175,6 @@
         
         <!-- View: Login / Welcome -->
         <div id="view-login" class="glass-panel p-8 rounded-2xl w-full max-w-md text-center transform transition-all duration-300">
-            <!-- Removed Logo Image here -->
             <h2 class="text-3xl font-tech mb-8 text-gold-400 font-bold">進入競技場</h2>
             <div class="space-y-6">
                 <input type="text" id="input-username" placeholder="輸入您的暱稱" class="w-full bg-slate-800 border border-slate-600 rounded-lg p-4 text-lg text-white focus:outline-none focus:border-gold-400 focus:ring-1 focus:ring-gold-400 transition">
@@ -205,12 +220,9 @@
         <!-- View: Waiting Room -->
         <div id="view-waiting" class="hidden glass-panel w-full max-w-4xl min-h-[500px] flex flex-col rounded-2xl overflow-hidden">
             <div class="bg-slate-900/80 p-6 border-b border-white/10 flex justify-between items-center">
-                <div class="flex items-center gap-4">
-                    <!-- Removed Logo Image -->
-                    <div>
-                        <h2 class="text-2xl font-tech text-white" id="room-title-display">Room Name</h2>
-                        <p class="text-slate-400 text-sm">Room ID: <span id="room-id-display" class="font-mono text-gold-400">...</span></p>
-                    </div>
+                <div>
+                    <h2 class="text-2xl font-tech text-white" id="room-title-display">Room Name</h2>
+                    <p class="text-slate-400 text-sm">Room ID: <span id="room-id-display" class="font-mono text-gold-400">...</span></p>
                 </div>
                 <div class="bg-indigo-900/50 px-4 py-2 rounded-full border border-indigo-500/30">
                     <i class="fa-solid fa-users text-indigo-400 mr-2"></i>
@@ -340,21 +352,29 @@
 
                     <!-- Calculator Interface (Only visible to active player) -->
                     <div id="calc-interface" class="w-full hidden flex-col gap-4">
-                        <!-- Equation Display -->
-                        <div class="bg-black/40 border border-slate-600 rounded-lg p-4 min-h-[60px] flex items-center justify-end overflow-hidden">
-                            <span id="current-equation" class="text-2xl font-mono text-gold-400 tracking-wider"></span>
+                        <!-- Equation Display with Cursor Support -->
+                        <div class="bg-black/40 border border-slate-600 rounded-lg p-4 min-h-[60px] flex items-center justify-end overflow-hidden cursor-text" onclick="document.getElementById('input-hidden').focus()">
+                            <div id="current-equation-html" class="text-2xl font-mono text-gold-400 tracking-wider flex items-center">
+                                <!-- Equation and Cursor will be rendered here -->
+                            </div>
                         </div>
 
-                        <!-- Operators -->
+                        <!-- Operators & Controls -->
                         <div class="grid grid-cols-4 gap-2">
                             <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold text-xl" data-val="+">+</button>
                             <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold text-xl" data-val="-">-</button>
                             <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold text-xl" data-val="*">×</button>
                             <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold text-xl" data-val="/">÷</button>
+                            
                             <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold text-xl" data-val="(">(</button>
                             <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold text-xl" data-val=")">)</button>
-                            <button class="calc-btn bg-red-900/50 hover:bg-red-800 text-red-200 rounded p-3 font-bold" onclick="game.clearEquation()">CLR</button>
-                            <button class="calc-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold" onclick="game.backspace()"><i class="fa-solid fa-delete-left"></i></button>
+                            
+                            <!-- Arrow Keys for Cursor -->
+                            <button class="calc-btn bg-slate-600 hover:bg-slate-500 text-white rounded p-3 font-bold text-xl" onclick="game.moveCursor(-1)"><i class="fa-solid fa-arrow-left"></i></button>
+                            <button class="calc-btn bg-slate-600 hover:bg-slate-500 text-white rounded p-3 font-bold text-xl" onclick="game.moveCursor(1)"><i class="fa-solid fa-arrow-right"></i></button>
+
+                            <button class="calc-btn bg-red-900/50 hover:bg-red-800 text-red-200 rounded p-3 font-bold col-span-2" onclick="game.clearEquation()">CLR</button>
+                            <button class="calc-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold col-span-2" onclick="game.backspace()"><i class="fa-solid fa-delete-left"></i></button>
                         </div>
                         
                         <button id="btn-submit" class="w-full bg-gold-500 hover:bg-gold-400 text-black font-bold py-3 rounded-lg text-xl uppercase tracking-wider shadow-lg">
@@ -436,8 +456,9 @@
         let myCards = []; 
         let usedCardsIndices = [];
         let equationString = "";
-        let equationHistory = []; // Fix: History stack
+        let equationHistory = []; // Stores objects { type: 'card'|'op', val: string, cardIdx?: number }
         let timerInterval = null; 
+        let cursorPos = 0; // New: Cursor Position (0 to length)
 
         // --- Auth Guard ---
         const initAuth = async () => {
@@ -961,6 +982,7 @@
             const roomRef = getRoomRef(currentRoomId);
             
             equationHistory = []; // Reset history
+            cursorPos = 0; // Reset cursor
             updateCalcState();    // Reset visual state
 
             try {
@@ -1004,25 +1026,35 @@
         window.game = {
             clearEquation: () => {
                 equationHistory = [];
+                cursorPos = 0;
                 updateCalcState();
             },
             backspace: () => {
-                // Fix: Strict backspace logic
-                if (equationHistory.length > 0) {
-                    equationHistory.pop();
-                    updateCalcState(); 
+                if (cursorPos > 0) {
+                    equationHistory.splice(cursorPos - 1, 1);
+                    cursorPos--;
+                    updateCalcState();
+                }
+            },
+            moveCursor: (delta) => {
+                let newPos = cursorPos + delta;
+                if (newPos >= 0 && newPos <= equationHistory.length) {
+                    cursorPos = newPos;
+                    updateCalcState();
                 }
             }
         };
 
         window.addToEquation = (val, idx) => {
-            equationHistory.push({ type: 'card', val: val, cardIdx: idx });
+            equationHistory.splice(cursorPos, 0, { type: 'card', val: val, cardIdx: idx });
+            cursorPos++;
             updateCalcState();
         };
 
         document.querySelectorAll('.op-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                equationHistory.push({ type: 'op', val: btn.dataset.val });
+                equationHistory.splice(cursorPos, 0, { type: 'op', val: btn.dataset.val });
+                cursorPos++;
                 updateCalcState();
             });
         });
@@ -1033,8 +1065,36 @@
             usedCardsIndices = equationHistory
                 .filter(item => item.type === 'card')
                 .map(item => item.cardIdx);
+            
+            // Build visual representation with cursor
+            const htmlContainer = document.getElementById('current-equation-html');
+            if (htmlContainer) {
+                htmlContainer.innerHTML = '';
                 
-            document.getElementById('current-equation').innerText = equationString;
+                // Add start cursor if pos 0
+                if (cursorPos === 0) {
+                    const cursor = document.createElement('span');
+                    cursor.className = 'equation-cursor';
+                    htmlContainer.appendChild(cursor);
+                }
+
+                equationHistory.forEach((item, index) => {
+                    const span = document.createElement('span');
+                    span.innerText = item.val;
+                    if (item.type === 'card') span.className = 'text-yellow-300 font-bold mx-1';
+                    else span.className = 'text-white mx-1';
+                    
+                    htmlContainer.appendChild(span);
+
+                    // Add cursor after this item if position matches
+                    if (index + 1 === cursorPos) {
+                        const cursor = document.createElement('span');
+                        cursor.className = 'equation-cursor';
+                        htmlContainer.appendChild(cursor);
+                    }
+                });
+            }
+
             renderGame(roomState); // Re-render to update card visual states
         }
 
