@@ -39,8 +39,6 @@
                         'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
                         'stamp': 'stamp-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
                         'cursor-blink': 'cursor-blink 1s step-end infinite',
-                        'deal-card': 'deal-fly-in 0.5s ease-out forwards',
-                        'shuffle': 'shuffle-shake 0.2s ease-in-out infinite',
                     },
                     keyframes: {
                         'stamp-in': {
@@ -50,15 +48,6 @@
                         'cursor-blink': {
                             '0%, 100%': { opacity: '1' },
                             '50%': { opacity: '0' },
-                        },
-                        'deal-fly-in': {
-                            '0%': { opacity: '0', transform: 'translateY(50px) scale(0.5)' },
-                            '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
-                        },
-                        'shuffle-shake': {
-                            '0%, 100%': { transform: 'translateX(0)' },
-                            '25%': { transform: 'translateX(-3px) rotate(-2deg)' },
-                            '75%': { transform: 'translateX(3px) rotate(2deg)' },
                         }
                     }
                 }
@@ -149,26 +138,6 @@
             cursor: not-allowed;
             transform: none;
             opacity: 0.6;
-        }
-
-        /* Card Back for Animation */
-        .card-back {
-            aspect-ratio: 2/3;
-            background: radial-gradient(circle, #3b82f6 10%, #1d4ed8 90%);
-            border: 4px solid white;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-        .card-back::after {
-            content: "60";
-            color: rgba(255,255,255,0.3);
-            font-family: 'Orbitron', sans-serif;
-            font-weight: bold;
-            font-size: 1.5rem;
-            transform: rotate(-45deg);
         }
 
         /* Cursor Style */
@@ -282,11 +251,11 @@
                         <h4 class="font-bold text-white mb-2 text-lg">規則簡介</h4>
                         <ul class="list-disc list-outside ml-5 space-y-2 text-xs md:text-sm text-slate-300 text-left">
                             <li>每名玩家2分底分，4分勝出，0分淘汰</li>
-                            <li>每局勝出者將獲加1分，作答錯誤或限時未能作答扣1分</li>
-                            <li>每局將會有5隻卡牌，以運算結果=60為目標</li>
-                            <li>玩家必須使用所有5張卡牌</li>
-                            <li>不同的卡牌必須使用 加 減 乘 除 及 括弧 連接出一條算式</li>
-                            <li>若玩家想作答，必需先按「搶答」按鈕，並限時30秒作答</li>
+                            <li>每局<span class="font-bold text-gold-400">勝出者將獲加1分，作答錯誤或限時未能作答扣1分</span></li>
+                            <li>每局將會有5隻卡牌，以<span class="font-bold text-gold-400">運算結果=60為目標</span></li>
+                            <li>玩家必須使用<span class="font-bold text-gold-400">所有5張卡牌</span></li>
+                            <li>不同的卡牌必須使用 <span class="font-bold text-gold-400">加 減 乘 除 及 括弧</span> 連接出一條算式</li>
+                            <li>若玩家想作答，必需<span class="font-bold text-gold-400">先按「搶答」按鈕，並限時30秒作答</span></li>
                             <li>搶答玩家需以 <span class="font-bold text-gold-400">按鍵及按卡牌</span> 方式作答</li>
                             <li>當所有玩家都按下「沒有解」時，該回合便立即終止</li>
                         </ul>
@@ -386,7 +355,7 @@
 
                     <!-- Cards Area -->
                     <div class="w-full mb-8">
-                        <div id="cards-container" class="flex justify-center gap-2 md:gap-4 flex-wrap min-h-[144px]">
+                        <div id="cards-container" class="flex justify-center gap-2 md:gap-4 flex-wrap">
                             <!-- Cards Generated Here -->
                         </div>
                     </div>
@@ -470,9 +439,9 @@
 
     <!-- Firebase Logic -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, updateDoc, onSnapshot, arrayUnion, arrayRemove, increment, getDoc, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, updateDoc, onSnapshot, arrayUnion, arrayRemove, increment, getDoc, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
         // Configuration
         const firebaseConfig = {
@@ -506,17 +475,13 @@
         let equationString = "";
         let equationHistory = []; // Stores objects { type: 'card'|'op', val: string, cardIdx?: number }
         let timerInterval = null; 
-        let cursorPos = 0; 
-        let isAnimatingRound = false; // State to lock UI during shuffle/deal
-        let localRoundTracker = 0; // Tracks local knowledge of round num to trigger animation
+        let cursorPos = 0; // New: Cursor Position (0 to length)
 
         // --- Auth Guard ---
         const initAuth = async () => {
             try {
-                // Fix: Check window properties safely
-                const token = window.__initial_auth_token;
-                if (token) {
-                    await signInWithCustomToken(auth, token);
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
                     await signInAnonymously(auth);
                 }
@@ -719,59 +684,8 @@
             }, 1000); 
         }
 
-        // --- New Round Animation Logic ---
-        function playRoundStartAnimation(cards) {
-            isAnimatingRound = true;
-            const container = document.getElementById('cards-container');
-            container.innerHTML = ''; // Clear container
-
-            // 1. Show Deck (Shuffling)
-            const deck = document.createElement('div');
-            deck.className = 'card-deck shuffle-active animate-shuffle';
-            deck.innerHTML = `
-                <div class="card-back absolute w-full h-full"></div>
-                <div class="card-back absolute w-full h-full"></div>
-                <div class="card-back absolute w-full h-full"></div>
-            `;
-            container.appendChild(deck);
-
-            // 2. Deal Cards after shuffle time
-            setTimeout(() => {
-                container.innerHTML = ''; // Remove deck
-                
-                cards.forEach((val, index) => {
-                    const card = document.createElement('div');
-                    // Add standard card classes but opacity 0 initially
-                    card.className = "playing-card w-16 h-24 md:w-20 md:h-28 text-2xl md:text-4xl rounded-lg shadow-lg flex items-center justify-center font-bold select-none opacity-0";
-                    // Apply deal animation with delay
-                    card.style.animation = `deal-fly-in 0.5s ease-out ${index * 0.15}s forwards`;
-                    
-                    const suits = ['♠', '♥', '♣', '♦'];
-                    const suit = suits[index % 4];
-                    const color = (index % 4 === 1 || index % 4 === 3) ? 'text-red-600' : 'text-slate-900';
-                    
-                    card.innerHTML = `
-                        <div class="${color}">${val}</div>
-                        <div class="absolute top-1 left-1 text-xs ${color}">${suit}</div>
-                        <div class="absolute bottom-1 right-1 text-xs ${color} transform rotate-180">${suit}</div>
-                    `;
-                    container.appendChild(card);
-                });
-
-                // 3. End Animation Lock after last card lands
-                setTimeout(() => {
-                    isAnimatingRound = false;
-                    // Trigger a re-render to attach event listeners and correct state classes
-                    // We can just call renderCards logic, or wait for next snapshot (might be slow).
-                    // Best to force a render call or ensure renderGame handles it.
-                    renderGame(roomState); 
-                }, 500 + (cards.length * 150)); // Animation duration + delays
-
-            }, 1500); // Shuffle duration
-        }
-
         // --- Rendering & Game Loop ---
-        function renderGame(data) {
+        function renderRoom(data) {
             // Updated to ensure Room Name persists
             document.getElementById('game-room-name').innerText = currentRoomId;
 
@@ -789,19 +703,7 @@
                 if (timerInterval) clearInterval(timerInterval);
             } else if (data.status === 'playing' || data.status === 'replay') {
                 showView('game');
-                
-                // Animation Trigger Check
-                if (data.status === 'playing' && data.round > localRoundTracker) {
-                    localRoundTracker = data.round;
-                    playRoundStartAnimation(data.cards);
-                    // We return here to let the animation function handle the initial DOM
-                    // The animation function will set isAnimatingRound=false and call renderGame again later
-                }
-                
-                if (!isAnimatingRound) {
-                   renderGameUI(data); // Refactored actual UI rendering to separate function
-                }
-                
+                renderGame(data);
                 if (!timerInterval) startTimerLoop();
             } else if (data.status === 'finished') {
                 showView('gameover');
@@ -811,8 +713,121 @@
             }
         }
 
-        // Split render logic to separate function to avoid recursion issues and clean up
-        function renderGameUI(data) {
+        // --- Waiting Room Logic ---
+        function renderWaitingRoom(data) {
+            document.getElementById('room-title-display').innerText = currentRoomId;
+            document.getElementById('room-id-display').innerText = currentRoomId;
+            document.getElementById('player-count').innerText = `${data.players.length}/6`;
+            
+            const container = document.getElementById('waiting-player-list');
+            container.innerHTML = '';
+            
+            let allReady = true;
+            data.players.forEach(p => {
+                const isMe = p.id === currentUser.uid;
+                if (!p.ready) allReady = false;
+                
+                const card = document.createElement('div');
+                card.className = `p-4 rounded-xl border flex items-center justify-between ${p.ready ? 'bg-indigo-900/40 border-indigo-500' : 'bg-slate-800 border-slate-700'}`;
+                card.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-user-astronaut text-slate-400"></i>
+                        </div>
+                        <span class="font-bold text-white">${p.name} ${isMe ? '(我)' : ''}</span>
+                        ${p.id === data.hostId ? '<i class="fa-solid fa-crown text-gold-400 ml-1" title="Host"></i>' : ''}
+                    </div>
+                    <div class="${p.ready ? 'text-green-400' : 'text-slate-500'} font-bold">
+                        ${p.ready ? 'READY' : 'WAITING'}
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+
+            const me = data.players.find(p => p.id === currentUser.uid);
+            const btnReady = document.getElementById('btn-ready');
+            btnReady.innerText = me.ready ? "取消準備" : "準備";
+            btnReady.className = me.ready 
+                ? "w-full py-4 rounded-xl font-bold text-lg bg-slate-600 text-slate-300 border-2 border-slate-500"
+                : "w-full py-4 rounded-xl font-bold text-lg bg-indigo-600 hover:bg-indigo-500 text-white border-2 border-indigo-400 shadow-[0_0_15px_rgba(79,70,229,0.3)] transition";
+
+            const btnStart = document.getElementById('btn-start-game');
+            if (currentUser.uid === data.hostId) {
+                btnStart.classList.remove('hidden');
+                if (allReady && data.players.length > 1) {
+                    btnStart.disabled = false;
+                    btnStart.classList.remove('opacity-50', 'cursor-not-allowed');
+                } else {
+                    btnStart.disabled = true;
+                    btnStart.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+            } else {
+                btnStart.classList.add('hidden');
+            }
+        }
+
+        document.getElementById('btn-ready').addEventListener('click', async () => {
+            if (!currentRoomId || !roomState) return;
+            const roomRef = getRoomRef(currentRoomId);
+            const me = roomState.players.find(p => p.id === currentUser.uid);
+            const updatedPlayers = roomState.players.map(p => {
+                if (p.id === currentUser.uid) return { ...p, ready: !p.ready };
+                return p;
+            });
+            await updateDoc(roomRef, { players: updatedPlayers });
+        });
+
+        document.getElementById('btn-start-game').addEventListener('click', async () => {
+            startNewRound(currentRoomId, 1);
+        });
+
+        document.getElementById('btn-next-round').addEventListener('click', async () => {
+             if (!currentRoomId || !roomState) return;
+             const winner = roomState.players.find(p => p.score >= 4);
+             const activePlayers = roomState.players.filter(p => p.status === 'active');
+             
+             const roomRef = getRoomRef(currentRoomId);
+
+             if (winner || activePlayers.length <= 1) {
+                 await updateDoc(roomRef, { status: 'finished' });
+             } else {
+                 startNewRound(currentRoomId, roomState.round + 1);
+             }
+        });
+
+        const terminateGame = async () => {
+            if (!currentRoomId || !roomState) return;
+             if (!confirm("確定要立即結束遊戲嗎？")) return;
+             
+             const roomRef = getRoomRef(currentRoomId);
+             await updateDoc(roomRef, { status: 'finished' });
+        };
+        document.getElementById('btn-terminate-game-main').addEventListener('click', terminateGame);
+        document.getElementById('btn-terminate-game-overlay').addEventListener('click', terminateGame);
+
+        // --- Game Logic ---
+        async function startNewRound(roomId, roundNum) {
+            const cards = [];
+            for(let i=0; i<5; i++) cards.push(Math.floor(Math.random() * 10) + 1);
+            
+            const future = new Date();
+            future.setSeconds(future.getSeconds() + 62); 
+
+            const roomRef = getRoomRef(roomId);
+            await updateDoc(roomRef, {
+                status: 'playing',
+                round: roundNum,
+                cards: cards,
+                currentBuzzer: null,
+                buzzerTime: null,
+                roundEndTime: future,
+                answerEndTime: null,
+                impossibleVotes: [],
+                lastResult: null
+            });
+        }
+
+        function renderGame(data) {
             const replayOverlay = document.getElementById('replay-overlay');
             const hostControls = document.getElementById('host-controls');
             const terminateBtnMain = document.getElementById('btn-terminate-game-main');
@@ -851,33 +866,30 @@
                 : "text-lg font-bold text-green-400";
 
             const cardsContainer = document.getElementById('cards-container');
-            // IMPORTANT: Only rebuild cards if NOT animating to avoid flickering/resetting animation
-            if (!isAnimatingRound) {
-                cardsContainer.innerHTML = '';
+            cardsContainer.innerHTML = '';
+            
+            data.cards.forEach((val, idx) => {
+                const card = document.createElement('div');
+                const isUsed = isMyTurn && usedCardsIndices.includes(idx);
                 
-                data.cards.forEach((val, idx) => {
-                    const card = document.createElement('div');
-                    const isUsed = isMyTurn && usedCardsIndices.includes(idx);
-                    
-                    card.className = `playing-card w-16 h-24 md:w-20 md:h-28 text-2xl md:text-4xl rounded-lg shadow-lg flex items-center justify-center font-bold select-none transition-all
-                        ${isUsed ? 'disabled opacity-20 transform scale-90' : 'bg-slate-100 text-slate-900 hover:-translate-y-1'}`;
-                    
-                    const suits = ['♠', '♥', '♣', '♦'];
-                    const suit = suits[idx % 4];
-                    const color = (idx % 4 === 1 || idx % 4 === 3) ? 'text-red-600' : 'text-slate-900';
-                    
-                    card.innerHTML = `
-                        <div class="${color}">${val}</div>
-                        <div class="absolute top-1 left-1 text-xs ${color}">${suit}</div>
-                        <div class="absolute bottom-1 right-1 text-xs ${color} transform rotate-180">${suit}</div>
-                    `;
-                    
-                    if (isMyTurn && !isUsed) {
-                        card.onclick = () => addToEquation(val, idx);
-                    }
-                    cardsContainer.appendChild(card);
-                });
-            }
+                card.className = `playing-card w-16 h-24 md:w-20 md:h-28 text-2xl md:text-4xl rounded-lg shadow-lg flex items-center justify-center font-bold select-none transition-all
+                    ${isUsed ? 'disabled opacity-20 transform scale-90' : 'bg-slate-100 text-slate-900 hover:-translate-y-1'}`;
+                
+                const suits = ['♠', '♥', '♣', '♦'];
+                const suit = suits[idx % 4];
+                const color = (idx % 4 === 1 || idx % 4 === 3) ? 'text-red-600' : 'text-slate-900';
+                
+                card.innerHTML = `
+                    <div class="${color}">${val}</div>
+                    <div class="absolute top-1 left-1 text-xs ${color}">${suit}</div>
+                    <div class="absolute bottom-1 right-1 text-xs ${color} transform rotate-180">${suit}</div>
+                `;
+                
+                if (isMyTurn && !isUsed) {
+                    card.onclick = () => addToEquation(val, idx);
+                }
+                cardsContainer.appendChild(card);
+            });
 
             const calcInterface = document.getElementById('calc-interface');
             const impossibleBtn = document.getElementById('btn-impossible');
