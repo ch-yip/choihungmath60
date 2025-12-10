@@ -866,32 +866,38 @@
                 impossibleBtn.disabled = true;
                 impossibleBtn.classList.add('opacity-30', 'grayscale');
             } else {
-                // Active player logic
+                // Active player logic - IMPOSSIBLE BUTTON HANDLING MOVED HERE (GLOBAL FOR ACTIVE)
+                
+                // Update text regardless of state
+                impossibleBtn.querySelector('span:last-child').innerText = `${data.impossibleVotes.length}/${data.players.filter(p=>p.status==='active').length}`;
+
+                // Check if already voted
+                if (data.impossibleVotes.includes(currentUser.uid)) {
+                    impossibleBtn.disabled = true;
+                    impossibleBtn.classList.add('opacity-50');
+                    impossibleBtn.classList.remove('hover:scale-105', 'active:scale-95', 'shadow-[0_0_30px_#ff0000]', 'hover:shadow-[0_0_50px_#ff0000]'); // Remove glow if voted
+                } else {
+                    // Not voted - Keep it BRIGHT and ACTIVE at all times
+                    impossibleBtn.disabled = false;
+                    impossibleBtn.classList.remove('opacity-50', 'opacity-30', 'grayscale');
+                    // Ensure the vivid red classes are present (they are in HTML, but just ensuring no classList removal screwed them up)
+                    // We don't need to re-add static classes, just ensure opacity is full.
+                }
+
+                // BUZZER / CALC LOGIC
                 if (!isSomeoneBuzzing) {
                     buzzContainer.innerHTML = `
                         <button id="btn-buzz" class="rounded-full w-32 h-32 md:w-40 md:h-40 bg-gradient-to-br from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600 shadow-[0_0_30px_rgba(79,70,229,0.5)] border-4 border-indigo-400 text-white font-bold text-2xl font-tech uppercase tracking-widest transition-all transform active:scale-95 animate-pulse">
                             搶答
                         </button>
                     `;
-                    // Re-attach event listener since innerHTML replaced it
                     document.getElementById('btn-buzz').addEventListener('click', onBuzzClick);
 
                     buzzContainer.classList.remove('hidden');
                     calcInterface.classList.add('hidden');
-                    
-                    impossibleBtn.disabled = data.impossibleVotes.includes(currentUser.uid);
-                    impossibleBtn.querySelector('span:last-child').innerText = `${data.impossibleVotes.length}/${data.players.filter(p=>p.status==='active').length}`;
-                    if (data.impossibleVotes.includes(currentUser.uid)) {
-                        impossibleBtn.classList.add('opacity-50');
-                    } else {
-                        impossibleBtn.classList.remove('opacity-50');
-                        impossibleBtn.classList.remove('grayscale');
-                    }
-
                 } else {
                     buzzContainer.classList.add('hidden');
-                    impossibleBtn.disabled = true;
-                    impossibleBtn.classList.add('opacity-30');
+                    // Removed the impossibleBtn disabling code from here!
 
                     if (isMyTurn) {
                         calcInterface.classList.remove('hidden');
