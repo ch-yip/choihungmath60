@@ -899,17 +899,15 @@
                 // Update text regardless of state
                 impossibleBtn.querySelector('span:last-child').innerText = `${data.impossibleVotes.length}/${data.players.filter(p=>p.status==='active').length}`;
 
-                // Check if already voted
-                if (data.impossibleVotes.includes(currentUser.uid)) {
+                // Check if already voted OR if I am currently answering (isMyTurn) - Fix: Buzzing player cannot press Impossible
+                if (data.impossibleVotes.includes(currentUser.uid) || isMyTurn) {
                     impossibleBtn.disabled = true;
                     impossibleBtn.classList.add('opacity-50');
-                    impossibleBtn.classList.remove('hover:scale-105', 'active:scale-95', 'shadow-[0_0_30px_#ff0000]', 'hover:shadow-[0_0_50px_#ff0000]'); // Remove glow if voted
+                    impossibleBtn.classList.remove('hover:scale-105', 'active:scale-95', 'shadow-[0_0_30px_#ff0000]', 'hover:shadow-[0_0_50px_#ff0000]'); // Remove glow if voted/busy
                 } else {
-                    // Not voted - Keep it BRIGHT and ACTIVE at all times
+                    // Not voted and not answering - Keep it BRIGHT and ACTIVE at all times
                     impossibleBtn.disabled = false;
                     impossibleBtn.classList.remove('opacity-50', 'opacity-30', 'grayscale');
-                    // Ensure the vivid red classes are present (they are in HTML, but just ensuring no classList removal screwed them up)
-                    // We don't need to re-add static classes, just ensure opacity is full.
                 }
 
                 // BUZZER / CALC LOGIC
@@ -925,8 +923,7 @@
                     calcInterface.classList.add('hidden');
                 } else {
                     buzzContainer.classList.add('hidden');
-                    // Removed the impossibleBtn disabling code from here!
-
+                    
                     if (isMyTurn) {
                         calcInterface.classList.remove('hidden');
                     } else {
@@ -1168,11 +1165,12 @@
                 if (Math.abs(result - 60) < 0.0001) {
                     handleRoundResult('correct', currentUser.uid, equationString);
                 } else {
-                    showToast(`結果是 ${result}，不是 60!`);
+                    // Fix 2: Wrong calculation -> direct penalty
                     handleRoundResult('wrong', currentUser.uid, equationString);
                 }
             } catch (e) {
-                showToast("算式格式錯誤!");
+                // Fix 2: Format error -> direct penalty
+                handleRoundResult('wrong', currentUser.uid, equationString);
             }
         });
 
