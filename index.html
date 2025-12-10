@@ -280,6 +280,11 @@
                     <div id="timer-progress" class="absolute left-0 bottom-0 h-1 bg-indigo-400 transition-all duration-1000 z-10" style="width: 100%"></div>
                     
                     <div class="relative z-20 flex items-center gap-4">
+                        <div class="bg-slate-900 rounded-lg px-4 py-2 border border-slate-700 min-w-[120px]">
+                            <span class="text-xs text-slate-400 uppercase block">Room</span>
+                            <!-- Added Room Name Display -->
+                            <span id="game-room-name" class="text-lg font-tech font-bold text-gold-400 truncate block">...</span>
+                        </div>
                         <div class="bg-slate-900 rounded-lg px-4 py-2 border border-slate-700">
                             <span class="text-xs text-slate-400 uppercase block">Round</span>
                             <span id="game-round" class="text-xl font-tech font-bold text-white">1</span>
@@ -368,20 +373,22 @@
 
                         <!-- Operators & Controls -->
                         <div class="grid grid-cols-4 gap-2">
-                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-4xl" data-val="+">+</button>
-                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-4xl" data-val="-">-</button>
-                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-4xl" data-val="*">×</button>
-                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-4xl" data-val="/">÷</button>
+                            <!-- Enlarged Operators -->
+                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-5xl h-24" data-val="+">+</button>
+                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-5xl h-24" data-val="-">-</button>
+                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-5xl h-24" data-val="*">×</button>
+                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-5xl h-24" data-val="/">÷</button>
                             
-                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-4xl" data-val="(">(</button>
-                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-4xl" data-val=")">)</button>
+                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-5xl h-24" data-val="(">(</button>
+                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-5xl h-24" data-val=")">)</button>
                             
-                            <!-- Arrow Keys for Cursor -->
-                            <button class="calc-btn bg-slate-600 hover:bg-slate-500 text-white rounded p-4 font-bold text-3xl" onclick="game.moveCursor(-1)"><i class="fa-solid fa-arrow-left"></i></button>
-                            <button class="calc-btn bg-slate-600 hover:bg-slate-500 text-white rounded p-4 font-bold text-3xl" onclick="game.moveCursor(1)"><i class="fa-solid fa-arrow-right"></i></button>
+                            <!-- Shrunken Arrow Keys -->
+                            <button class="calc-btn bg-slate-600 hover:bg-slate-500 text-white rounded p-2 font-bold text-xl h-24 flex items-center justify-center" onclick="game.moveCursor(-1)"><i class="fa-solid fa-arrow-left"></i></button>
+                            <button class="calc-btn bg-slate-600 hover:bg-slate-500 text-white rounded p-2 font-bold text-xl h-24 flex items-center justify-center" onclick="game.moveCursor(1)"><i class="fa-solid fa-arrow-right"></i></button>
 
-                            <button class="calc-btn bg-red-900/50 hover:bg-red-800 text-red-200 rounded p-3 font-bold col-span-2 text-xl" onclick="game.clearEquation()">CLR</button>
-                            <button class="calc-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold col-span-2 text-xl" onclick="game.backspace()"><i class="fa-solid fa-delete-left"></i></button>
+                            <!-- Enlarged Controls -->
+                            <button class="calc-btn bg-red-900/50 hover:bg-red-800 text-red-200 rounded p-4 font-bold col-span-2 text-3xl h-20" onclick="game.clearEquation()">CLR</button>
+                            <button class="calc-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold col-span-2 text-3xl h-20" onclick="game.backspace()"><i class="fa-solid fa-delete-left"></i></button>
                         </div>
                         
                         <button id="btn-submit" class="w-full bg-gold-500 hover:bg-gold-400 text-black font-bold py-3 rounded-lg text-xl uppercase tracking-wider shadow-lg">
@@ -676,6 +683,9 @@
 
         // --- Rendering & Game Loop ---
         function renderRoom(data) {
+            // Updated to ensure Room Name persists
+            document.getElementById('game-room-name').innerText = currentRoomId;
+
             // Check for Impossible condition inside render to catch all updates
             if (currentUser && data.hostId === currentUser.uid && data.status === 'playing') {
                 const activeCount = data.players.filter(p => p.status === 'active').length;
@@ -1155,6 +1165,16 @@
             if (usedCardsIndices.length !== 5) {
                 handleRoundResult('wrong', currentUser.uid, equationString + " (少於5張牌)");
                 return;
+            }
+
+            // Check for adjacent cards (missing operator) - New Validation Rule
+            let lastType = null;
+            for (let item of equationHistory) {
+                if (lastType === 'card' && item.type === 'card') {
+                    handleRoundResult('wrong', currentUser.uid, equationString + " (缺少運算符號)");
+                    return;
+                }
+                lastType = item.type;
             }
             
             try {
