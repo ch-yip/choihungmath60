@@ -368,20 +368,20 @@
 
                         <!-- Operators & Controls -->
                         <div class="grid grid-cols-4 gap-2">
-                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold text-xl" data-val="+">+</button>
-                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold text-xl" data-val="-">-</button>
-                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold text-xl" data-val="*">×</button>
-                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold text-xl" data-val="/">÷</button>
+                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-4xl" data-val="+">+</button>
+                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-4xl" data-val="-">-</button>
+                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-4xl" data-val="*">×</button>
+                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-4xl" data-val="/">÷</button>
                             
-                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold text-xl" data-val="(">(</button>
-                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold text-xl" data-val=")">)</button>
+                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-4xl" data-val="(">(</button>
+                            <button class="calc-btn op-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-4 font-bold text-4xl" data-val=")">)</button>
                             
                             <!-- Arrow Keys for Cursor -->
-                            <button class="calc-btn bg-slate-600 hover:bg-slate-500 text-white rounded p-3 font-bold text-xl" onclick="game.moveCursor(-1)"><i class="fa-solid fa-arrow-left"></i></button>
-                            <button class="calc-btn bg-slate-600 hover:bg-slate-500 text-white rounded p-3 font-bold text-xl" onclick="game.moveCursor(1)"><i class="fa-solid fa-arrow-right"></i></button>
+                            <button class="calc-btn bg-slate-600 hover:bg-slate-500 text-white rounded p-4 font-bold text-3xl" onclick="game.moveCursor(-1)"><i class="fa-solid fa-arrow-left"></i></button>
+                            <button class="calc-btn bg-slate-600 hover:bg-slate-500 text-white rounded p-4 font-bold text-3xl" onclick="game.moveCursor(1)"><i class="fa-solid fa-arrow-right"></i></button>
 
-                            <button class="calc-btn bg-red-900/50 hover:bg-red-800 text-red-200 rounded p-3 font-bold col-span-2" onclick="game.clearEquation()">CLR</button>
-                            <button class="calc-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold col-span-2" onclick="game.backspace()"><i class="fa-solid fa-delete-left"></i></button>
+                            <button class="calc-btn bg-red-900/50 hover:bg-red-800 text-red-200 rounded p-3 font-bold col-span-2 text-xl" onclick="game.clearEquation()">CLR</button>
+                            <button class="calc-btn bg-slate-700 hover:bg-slate-600 text-white rounded p-3 font-bold col-span-2 text-xl" onclick="game.backspace()"><i class="fa-solid fa-delete-left"></i></button>
                         </div>
                         
                         <button id="btn-submit" class="w-full bg-gold-500 hover:bg-gold-400 text-black font-bold py-3 rounded-lg text-xl uppercase tracking-wider shadow-lg">
@@ -867,7 +867,7 @@
                 const color = (idx % 4 === 1 || idx % 4 === 3) ? 'text-red-600' : 'text-slate-900';
                 
                 card.innerHTML = `
-                    <div class="${color}">${val === 1 ? 'A' : val}</div>
+                    <div class="${color}">${val}</div>
                     <div class="absolute top-1 left-1 text-xs ${color}">${suit}</div>
                     <div class="absolute bottom-1 right-1 text-xs ${color} transform rotate-180">${suit}</div>
                 `;
@@ -1222,7 +1222,7 @@
             data.cards.forEach(val => {
                 const card = document.createElement('div');
                 card.className = "playing-card w-12 h-16 text-lg rounded bg-white text-black flex items-center justify-center font-bold shadow-lg";
-                card.innerText = val === 1 ? 'A' : val;
+                card.innerText = val;
                 container.appendChild(card);
             });
 
