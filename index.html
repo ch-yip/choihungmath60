@@ -266,12 +266,15 @@
                     </div>
                 </div>
 
-                <!-- Impossible Button -->
-                <button id="btn-impossible" class="glass-panel rounded-xl p-4 bg-red-900/30 border border-red-500/30 hover:bg-red-900/50 transition flex flex-col items-center justify-center min-w-[120px]">
-                    <i class="fa-solid fa-ban text-2xl text-red-400 mb-1"></i>
-                    <span class="text-xs font-bold text-red-200 uppercase">該題無法計算</span>
-                    <span id="impossible-votes" class="text-xs text-red-400 mt-1">0/0</span>
-                </button>
+                <!-- Impossible Button (Updated Fix 3: Brighter + Explanation) -->
+                <div class="flex flex-col items-center">
+                    <button id="btn-impossible" class="glass-panel rounded-xl p-4 bg-red-900/40 border border-red-500/50 hover:bg-red-900/70 transition flex flex-col items-center justify-center min-w-[140px] shadow-[0_0_15px_rgba(239,68,68,0.4)] hover:shadow-[0_0_25px_rgba(239,68,68,0.7)]">
+                        <i class="fa-solid fa-ban text-2xl text-red-400 mb-1"></i>
+                        <span class="text-sm font-bold text-red-100 uppercase tracking-wider">沒有解</span>
+                        <span id="impossible-votes" class="text-xs text-red-300 mt-1 font-mono">0/0</span>
+                    </button>
+                    <span class="text-[10px] text-slate-400 mt-2 max-w-[140px] text-center leading-tight">當所有玩家都按「沒有解」按鈕，這個回合便會取消</span>
+                </div>
             </div>
 
             <div class="flex flex-col lg:flex-row gap-4 items-start">
@@ -416,7 +419,6 @@
         const db = getFirestore(app);
 
         // --- Global State ---
-        // 修正：確保 appId 正確初始化，避免 undefined 導致路徑錯誤
         const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
 
         let currentUser = null;
@@ -426,10 +428,10 @@
         let myCards = []; 
         let usedCardsIndices = [];
         let equationString = "";
-        let timerInterval = null; // Used for UI countdown loop
+        let equationHistory = []; // Fix 2: Add history stack
+        let timerInterval = null; 
 
         // --- Auth Guard ---
-        // 強制在開始前進行身份驗證，防止權限錯誤
         const initAuth = async () => {
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -445,7 +447,6 @@
         initAuth();
 
         // --- Helper Function for Firestore Paths ---
-        // 修正：使用 encodeURIComponent 確保路徑安全
         function getRoomRef(roomId) {
             const safeId = encodeURIComponent(roomId);
             return doc(db, 'artifacts', appId, 'public', 'data', 'rooms', safeId);
@@ -464,7 +465,6 @@
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 currentUser = user;
-                // 啟用登入按鈕
                 const btnLogin = document.getElementById('btn-login');
                 btnLogin.disabled = false;
                 btnLogin.innerHTML = "開始遊戲";
@@ -481,7 +481,7 @@
         });
 
         document.getElementById('btn-login').addEventListener('click', () => {
-            if (!currentUser) return; // Guard
+            if (!currentUser) return; 
             const name = document.getElementById('input-username').value.trim();
             if (!name) return alert("請輸入暱稱");
             localStorage.setItem('playerName', name);
@@ -586,19 +586,16 @@
                 renderRoom(data);
             }, (error) => {
                 console.error("Snapshot Error:", error);
-                // 不要在這裡 alert，避免干擾使用者體驗，但這是除錯關鍵
             });
         }
 
-        // --- Timer Loop Logic (Fix 1) ---
+        // --- Timer Loop Logic ---
         function startTimerLoop() {
             if (timerInterval) clearInterval(timerInterval);
             timerInterval = setInterval(() => {
                 if (!roomState) return;
                 
-                // Only run logic if playing
                 if (roomState.status !== 'playing') {
-                     // For replay or other states, set timer to 0 or static
                      document.getElementById('main-timer').innerText = "0";
                      document.getElementById('timer-progress').style.width = "0%";
                      return;
@@ -613,7 +610,7 @@
                 if (isSomeoneBuzzing) {
                     if (roomState.answerEndTime) {
                         remaining = Math.max(0, Math.ceil((roomState.answerEndTime.toMillis() - now) / 1000));
-                        total = 30; // Updated to 30s
+                        total = 30; 
                     }
                 } else {
                     if (roomState.roundEndTime) {
@@ -630,23 +627,19 @@
                     ? "absolute left-0 bottom-0 h-1 bg-red-500 transition-all duration-300 z-10" 
                     : "absolute left-0 bottom-0 h-1 bg-indigo-400 transition-all duration-300 z-10";
                 
-                // Trigger timeout (Host Only) - Client side check to trigger DB write
                 if (currentUser && roomState.hostId === currentUser.uid && remaining === 0) {
                      if (isSomeoneBuzzing) {
-                         // To prevent multiple triggers, check if lastResult is null or we are still in playing
-                         // Just call it, handleRoundResult is robust enough or state will change
                          handleRoundResult('timeout', roomState.currentBuzzer);
                      } else {
                          handleRoundResult('impossible', null);
                      }
                 }
 
-            }, 1000); // Update every second
+            }, 1000); 
         }
 
         // --- Rendering & Game Loop ---
         function renderRoom(data) {
-            // View Switching
             if (data.status === 'waiting') {
                 showView('waiting');
                 renderWaitingRoom(data);
@@ -654,8 +647,6 @@
             } else if (data.status === 'playing' || data.status === 'replay') {
                 showView('game');
                 renderGame(data);
-                // Ensure timer loop is running if playing, but renderGame handles snapshot updates too.
-                // We start the interval once when entering game view.
                 if (!timerInterval) startTimerLoop();
             } else if (data.status === 'finished') {
                 showView('gameover');
@@ -696,7 +687,6 @@
                 container.appendChild(card);
             });
 
-            // Button Logic
             const me = data.players.find(p => p.id === currentUser.uid);
             const btnReady = document.getElementById('btn-ready');
             btnReady.innerText = me.ready ? "取消準備" : "準備";
@@ -736,7 +726,6 @@
 
         document.getElementById('btn-next-round').addEventListener('click', async () => {
              if (!currentRoomId || !roomState) return;
-             // Host Logic: Check if game should end
              const winner = roomState.players.find(p => p.score >= 4);
              const activePlayers = roomState.players.filter(p => p.status === 'active');
              
@@ -749,7 +738,6 @@
              }
         });
 
-        // Terminate Game Handler (For both buttons)
         const terminateGame = async () => {
             if (!currentRoomId || !roomState) return;
              if (!confirm("確定要立即結束遊戲嗎？")) return;
@@ -786,8 +774,8 @@
             const replayOverlay = document.getElementById('replay-overlay');
             const hostControls = document.getElementById('host-controls');
             const terminateBtnMain = document.getElementById('btn-terminate-game-main');
+            const buzzContainer = document.getElementById('buzz-container'); // Fix 1: Ref for UI update
 
-            // Host Controls Visibility
             if (currentUser.uid === data.hostId) {
                 terminateBtnMain.classList.remove('hidden');
             } else {
@@ -797,16 +785,12 @@
             if (data.status === 'replay' && data.lastResult) {
                 replayOverlay.classList.remove('hidden');
                 
-                // Host Controls in Overlay
                 if (currentUser.uid === data.hostId) {
                     hostControls.classList.remove('hidden');
                 } else {
                     hostControls.classList.add('hidden');
                 }
-
                 playReplay(data);
-                // Don't return here so background game state is still rendered (optional, but looks better if cards are visible behind)
-                // Actually playReplay handles the overlay content. We can let the rest run to update scores etc.
             } else {
                 replayOverlay.classList.add('hidden');
                 hostControls.classList.add('hidden');
@@ -824,24 +808,9 @@
                 ? "text-lg font-bold text-red-400 animate-pulse" 
                 : "text-lg font-bold text-green-400";
 
-            // Timer display is now handled primarily by startTimerLoop to ensure smoothness, 
-            // but we can set initial values here to prevent empty flash.
-            // We won't overwrite DOM if loop is running to avoid conflict flickering, 
-            // but loop runs 1s interval. 
-            // Actually, `startTimerLoop` updates the DOM directly. `renderGame` is called on snapshot. 
-            // Let's rely on `startTimerLoop` for the numbers and bar.
-
-            if (currentUser.uid === data.hostId && data.status === 'playing') {
-                 // Double check timeout logic here just in case setInterval lags? 
-                 // Actually setInterval is better for this.
-            }
-
             const cardsContainer = document.getElementById('cards-container');
             cardsContainer.innerHTML = '';
             
-            if (!isMyTurn || usedCardsIndices.length === 0) {
-            }
-
             data.cards.forEach((val, idx) => {
                 const card = document.createElement('div');
                 const isUsed = isMyTurn && usedCardsIndices.includes(idx);
@@ -865,35 +834,56 @@
                 cardsContainer.appendChild(card);
             });
 
-            const buzzContainer = document.getElementById('buzz-container');
             const calcInterface = document.getElementById('calc-interface');
             const impossibleBtn = document.getElementById('btn-impossible');
 
-            if (!isSomeoneBuzzing) {
+            // Fix 1: Strict Elimination UI Check
+            if (me.status !== 'active') {
+                buzzContainer.innerHTML = `
+                    <div class="flex flex-col items-center justify-center h-32 md:h-40">
+                        <i class="fa-solid fa-skull-crossbones text-4xl text-gray-500 mb-2"></i>
+                        <span class="text-gray-500 font-bold text-xl uppercase tracking-widest">已淘汰</span>
+                    </div>
+                `;
                 buzzContainer.classList.remove('hidden');
                 calcInterface.classList.add('hidden');
-                document.getElementById('btn-buzz').disabled = false;
-                document.getElementById('btn-buzz').classList.remove('opacity-50');
-                
-                impossibleBtn.disabled = data.impossibleVotes.includes(currentUser.uid);
-                impossibleBtn.querySelector('span:last-child').innerText = `${data.impossibleVotes.length}/${data.players.filter(p=>p.status==='active').length}`;
-                if (data.impossibleVotes.includes(currentUser.uid)) {
-                    impossibleBtn.classList.add('opacity-50');
-                } else {
-                    impossibleBtn.classList.remove('opacity-50');
-                }
-
-            } else {
-                buzzContainer.classList.add('hidden');
                 impossibleBtn.disabled = true;
-                impossibleBtn.classList.add('opacity-30');
+                impossibleBtn.classList.add('opacity-30', 'grayscale');
+            } else {
+                // Active player logic
+                if (!isSomeoneBuzzing) {
+                    buzzContainer.innerHTML = `
+                        <button id="btn-buzz" class="rounded-full w-32 h-32 md:w-40 md:h-40 bg-gradient-to-br from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600 shadow-[0_0_30px_rgba(79,70,229,0.5)] border-4 border-indigo-400 text-white font-bold text-2xl font-tech uppercase tracking-widest transition-all transform active:scale-95 animate-pulse">
+                            搶答
+                        </button>
+                    `;
+                    // Re-attach event listener since innerHTML replaced it
+                    document.getElementById('btn-buzz').addEventListener('click', onBuzzClick);
 
-                if (isMyTurn) {
-                    calcInterface.classList.remove('hidden');
-                } else {
+                    buzzContainer.classList.remove('hidden');
                     calcInterface.classList.add('hidden');
-                    const buzzerName = data.players.find(p => p.id === data.currentBuzzer)?.name;
-                    cardsContainer.innerHTML += `<div class="w-full text-center text-yellow-400 font-bold mt-4 animate-pulse">${buzzerName} 正在計算中...</div>`;
+                    
+                    impossibleBtn.disabled = data.impossibleVotes.includes(currentUser.uid);
+                    impossibleBtn.querySelector('span:last-child').innerText = `${data.impossibleVotes.length}/${data.players.filter(p=>p.status==='active').length}`;
+                    if (data.impossibleVotes.includes(currentUser.uid)) {
+                        impossibleBtn.classList.add('opacity-50');
+                    } else {
+                        impossibleBtn.classList.remove('opacity-50');
+                        impossibleBtn.classList.remove('grayscale');
+                    }
+
+                } else {
+                    buzzContainer.classList.add('hidden');
+                    impossibleBtn.disabled = true;
+                    impossibleBtn.classList.add('opacity-30');
+
+                    if (isMyTurn) {
+                        calcInterface.classList.remove('hidden');
+                    } else {
+                        calcInterface.classList.add('hidden');
+                        const buzzerName = data.players.find(p => p.id === data.currentBuzzer)?.name;
+                        cardsContainer.innerHTML += `<div class="w-full text-center text-yellow-400 font-bold mt-4 animate-pulse">${buzzerName} 正在計算中...</div>`;
+                    }
                 }
             }
 
@@ -932,11 +922,12 @@
         }
 
         // --- Interaction Logic ---
-
-        document.getElementById('btn-buzz').addEventListener('click', async () => {
+        
+        // Define buzz handler function so we can re-attach it easily
+        async function onBuzzClick() {
             if (!currentRoomId || !roomState) return;
             
-            // Check elimination status (Fix 4)
+            // Double check elimination status locally
             const me = roomState.players.find(p => p.id === currentUser.uid);
             if (me.status !== 'active') {
                 showToast("你已被淘汰，無法搶答！");
@@ -947,9 +938,8 @@
 
             const roomRef = getRoomRef(currentRoomId);
             
-            equationString = "";
-            usedCardsIndices = [];
-            updateCalcDisplay();
+            equationHistory = []; // Reset history
+            updateCalcState();    // Reset visual state
 
             try {
                 await runTransaction(db, async (transaction) => {
@@ -959,7 +949,7 @@
                     if (data.currentBuzzer !== null) throw "Too late"; 
 
                     const future = new Date();
-                    future.setSeconds(future.getSeconds() + 32); // 30s + 2s buffer (Fix 1)
+                    future.setSeconds(future.getSeconds() + 32); 
 
                     transaction.update(roomRef, {
                         currentBuzzer: currentUser.uid,
@@ -970,7 +960,9 @@
             } catch (e) {
                 console.log("Buzz failed:", e);
             }
-        });
+        }
+        // Initial attachment not strictly needed as renderGame overwrites, but good practice
+        // document.getElementById('btn-buzz').addEventListener('click', onBuzzClick); // Removed to avoid dupes
 
         document.getElementById('btn-impossible').addEventListener('click', async () => {
              if (!currentRoomId || !roomState) return;
@@ -999,38 +991,42 @@
             }
         }
 
-        // --- Calculator Logic ---
+        // --- Calculator Logic (Fix 2: History & Backspace) ---
         window.game = {
             clearEquation: () => {
-                equationString = "";
-                usedCardsIndices = [];
-                updateCalcDisplay();
+                equationHistory = [];
+                updateCalcState();
             },
             backspace: () => {
-                game.clearEquation(); 
+                equationHistory.pop();
+                updateCalcState(); 
             }
         };
 
         window.addToEquation = (val, idx) => {
-            equationString += val;
-            usedCardsIndices.push(idx);
-            updateCalcDisplay();
+            equationHistory.push({ type: 'card', val: val, cardIdx: idx });
+            updateCalcState();
         };
 
         document.querySelectorAll('.op-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                equationString += btn.dataset.val;
-                updateCalcDisplay();
+                equationHistory.push({ type: 'op', val: btn.dataset.val });
+                updateCalcState();
             });
         });
 
-        function updateCalcDisplay() {
+        function updateCalcState() {
+            // Rebuild string and used indices from history
+            equationString = equationHistory.map(item => item.val).join('');
+            usedCardsIndices = equationHistory
+                .filter(item => item.type === 'card')
+                .map(item => item.cardIdx);
+                
             document.getElementById('current-equation').innerText = equationString;
-            renderGame(roomState); 
+            renderGame(roomState); // Re-render to update card visual states
         }
 
         document.getElementById('btn-submit').addEventListener('click', () => {
-            // Fix 2: Strict Card Usage (Wrong if not 5)
             if (usedCardsIndices.length !== 5) {
                 handleRoundResult('wrong', currentUser.uid, equationString + " (少於5張牌)");
                 return;
@@ -1077,17 +1073,11 @@
                 }
             }
 
-            // Note: We don't auto-check winner here for transition anymore.
-            // We just update state to Replay. Host decides next step.
-
             await updateDoc(roomRef, {
                 status: 'replay',
                 lastResult: { type, playerId, equation },
                 players: players
             });
-            
-            // Fix 3: Removed automatic setTimeout transition.
-            // Host button handles it now.
         }
 
         // --- Replay Animation Logic ---
@@ -1122,7 +1112,6 @@
             eqDiv.innerHTML = '';
             
             const typeTimer = setInterval(() => {
-                // Ensure element still exists (if view switched quickly)
                 if(!document.getElementById('replay-equation')) {
                     clearInterval(typeTimer);
                     return;
