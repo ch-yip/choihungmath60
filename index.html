@@ -159,8 +159,8 @@
             <h2 class="text-2xl font-tech mb-6 text-gold-400">進入競技場</h2>
             <div class="space-y-4">
                 <input type="text" id="input-username" placeholder="輸入您的暱稱" class="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-white focus:outline-none focus:border-gold-400 focus:ring-1 focus:ring-gold-400 transition">
-                <button id="btn-login" class="w-full bg-gradient-to-r from-gold-600 to-yellow-500 hover:from-gold-500 hover:to-yellow-400 text-slate-950 font-bold py-3 px-6 rounded-lg transform hover:scale-105 transition shadow-lg shadow-yellow-500/20">
-                    開始遊戲
+                <button id="btn-login" disabled class="w-full bg-slate-700 text-slate-400 font-bold py-3 px-6 rounded-lg transition shadow-lg cursor-not-allowed">
+                    <i class="fa-solid fa-spinner fa-spin mr-2"></i>連線中...
                 </button>
             </div>
         </div>
@@ -377,7 +377,7 @@
     <!-- Firebase Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, updateDoc, onSnapshot, arrayUnion, arrayRemove, increment, getDoc, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
         // Configuration
@@ -401,8 +401,8 @@
         const db = getFirestore(app);
 
         // --- Global State ---
-        // 使用環境提供的 appId 或預設值，這對於在 Canvas 中正確存取 Firestore 是必須的
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // 修正：確保 appId 正確初始化，避免 undefined 導致路徑錯誤
+        const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
 
         let currentUser = null;
         let currentRoomId = null;
@@ -413,10 +413,27 @@
         let equationString = "";
         let timerInterval = null;
 
+        // --- Auth Guard ---
+        // 強制在開始前進行身份驗證，防止權限錯誤
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Auth Failed", error);
+                alert("連線失敗，請重新整理");
+            }
+        };
+        initAuth();
+
         // --- Helper Function for Firestore Paths ---
-        // 修正：使用 Canvas 專用的公開資料路徑格式
+        // 修正：使用 encodeURIComponent 確保路徑安全
         function getRoomRef(roomId) {
-            return doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
+            const safeId = encodeURIComponent(roomId);
+            return doc(db, 'artifacts', appId, 'public', 'data', 'rooms', safeId);
         }
 
         // --- DOM Elements ---
@@ -432,20 +449,24 @@
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 currentUser = user;
-                if (!localStorage.getItem('playerName')) {
-                    showView('login');
-                } else {
+                // 啟用登入按鈕
+                const btnLogin = document.getElementById('btn-login');
+                btnLogin.disabled = false;
+                btnLogin.innerHTML = "開始遊戲";
+                btnLogin.classList.remove('bg-slate-700', 'text-slate-400', 'cursor-not-allowed');
+                btnLogin.classList.add('bg-gradient-to-r', 'from-gold-600', 'to-yellow-500', 'text-slate-950', 'hover:scale-105');
+
+                if (localStorage.getItem('playerName')) {
                     currentUser.displayName = localStorage.getItem('playerName');
                     document.getElementById('display-username').innerText = currentUser.displayName;
                     document.getElementById('user-info').classList.remove('hidden');
                     showView('lobby');
                 }
-            } else {
-                signInAnonymously(auth).catch(console.error);
             }
         });
 
         document.getElementById('btn-login').addEventListener('click', () => {
+            if (!currentUser) return; // Guard
             const name = document.getElementById('input-username').value.trim();
             if (!name) return alert("請輸入暱稱");
             localStorage.setItem('playerName', name);
@@ -457,12 +478,12 @@
 
         // --- Lobby Logic ---
         document.getElementById('btn-create-room').addEventListener('click', async () => {
+            if (!currentUser) return alert("尚未連線，請稍候");
             const name = document.getElementById('create-room-name').value.trim();
             if (!name) return alert("請輸入房間名稱");
             const pass = document.getElementById('create-room-pass').value.trim();
             
             const roomId = name; 
-            // 修正：使用 helper 函數取得正確路徑的 reference
             const roomRef = getRoomRef(roomId);
             
             try {
@@ -476,7 +497,7 @@
                     round: 0,
                     players: [{
                         id: currentUser.uid,
-                        name: currentUser.displayName,
+                        name: currentUser.displayName || 'Player',
                         score: 2, 
                         ready: false,
                         status: 'active', 
@@ -493,17 +514,17 @@
                 });
                 joinRoomLogic(roomId);
             } catch (e) {
-                console.error(e);
+                console.error("Create Room Error:", e);
                 alert("建立失敗: " + e.message);
             }
         });
 
         document.getElementById('btn-join-room').addEventListener('click', async () => {
+            if (!currentUser) return alert("尚未連線，請稍候");
             const roomId = document.getElementById('join-room-id').value.trim();
             const pass = document.getElementById('join-room-pass').value.trim();
             if (!roomId) return;
 
-            // 修正：使用 helper 函數
             const roomRef = getRoomRef(roomId);
             try {
                 const docSnap = await getDoc(roomRef);
@@ -520,7 +541,7 @@
                 await updateDoc(roomRef, {
                     players: arrayUnion({
                         id: currentUser.uid,
-                        name: currentUser.displayName,
+                        name: currentUser.displayName || 'Player',
                         score: 2,
                         ready: false,
                         status: 'active',
@@ -529,8 +550,8 @@
                 });
                 joinRoomLogic(roomId);
             } catch (e) {
-                console.error(e);
-                alert("加入失敗");
+                console.error("Join Room Error:", e);
+                alert("加入失敗，請重試");
             }
         });
 
@@ -538,7 +559,6 @@
             currentRoomId = roomId;
             if (roomUnsubscribe) roomUnsubscribe();
             
-            // 修正：使用 helper 函數
             const roomRef = getRoomRef(roomId);
             roomUnsubscribe = onSnapshot(roomRef, (snapshot) => {
                 if (!snapshot.exists()) {
@@ -549,6 +569,9 @@
                 const data = snapshot.data();
                 roomState = data;
                 renderRoom(data);
+            }, (error) => {
+                console.error("Snapshot Error:", error);
+                // 不要在這裡 alert，避免干擾使用者體驗，但這是除錯關鍵
             });
         }
 
@@ -624,7 +647,6 @@
 
         document.getElementById('btn-ready').addEventListener('click', async () => {
             if (!currentRoomId || !roomState) return;
-            // 修正：使用 helper 函數
             const roomRef = getRoomRef(currentRoomId);
             const me = roomState.players.find(p => p.id === currentUser.uid);
             const updatedPlayers = roomState.players.map(p => {
@@ -646,7 +668,6 @@
             const future = new Date();
             future.setSeconds(future.getSeconds() + 62); 
 
-            // 修正：使用 helper 函數
             const roomRef = getRoomRef(roomId);
             await updateDoc(roomRef, {
                 status: 'playing',
@@ -815,7 +836,6 @@
             if (!currentRoomId || !roomState) return;
             if (roomState.currentBuzzer !== null) return;
 
-            // 修正：使用 helper 函數
             const roomRef = getRoomRef(currentRoomId);
             
             equationString = "";
@@ -847,7 +867,6 @@
              if (!currentRoomId || !roomState) return;
              if (roomState.impossibleVotes.includes(currentUser.uid)) return;
 
-             // 修正：使用 helper 函數
              const roomRef = getRoomRef(currentRoomId);
              await updateDoc(roomRef, {
                  impossibleVotes: arrayUnion(currentUser.uid)
@@ -860,7 +879,6 @@
             if (roomState.hostId === currentUser.uid) {
                 const activePlayers = roomState.players.filter(p => p.status === 'active');
                 if (roomState.impossibleVotes.length + 1 >= activePlayers.length) { 
-                    // 修正：使用 helper 函數
                     const rRef = getRoomRef(currentRoomId);
                     const snap = await getDoc(rRef);
                     const d = snap.data();
@@ -933,7 +951,6 @@
 
         // --- Result Handling (Host Driven) ---
         async function handleRoundResult(type, playerId, equation = "") {
-            // 修正：使用 helper 函數
             const roomRef = getRoomRef(currentRoomId);
             const docSnap = await getDoc(roomRef);
             const data = docSnap.data();
