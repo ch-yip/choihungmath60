@@ -266,14 +266,14 @@
                     </div>
                 </div>
 
-                <!-- Impossible Button (Updated UI: Brighter red, backlight, and updated text) -->
+                <!-- Impossible Button (Updated UI: Much brighter red, stronger backlight) -->
                 <div class="flex flex-col items-center">
-                    <button id="btn-impossible" class="glass-panel rounded-xl p-4 bg-red-600 hover:bg-red-500 border border-red-400 text-white transition flex flex-col items-center justify-center min-w-[140px] shadow-[0_0_20px_rgba(239,68,68,0.6)] hover:shadow-[0_0_30px_rgba(239,68,68,0.8)]">
-                        <i class="fa-solid fa-ban text-2xl mb-1"></i>
-                        <span class="text-sm font-bold uppercase tracking-wider">沒有解</span>
-                        <span id="impossible-votes" class="text-xs mt-1 font-mono">0/0</span>
+                    <button id="btn-impossible" class="glass-panel rounded-xl p-4 bg-red-600 hover:bg-red-500 border-2 border-red-300 text-white transition flex flex-col items-center justify-center min-w-[140px] shadow-[0_0_25px_rgba(255,50,50,0.6)] hover:shadow-[0_0_40px_rgba(255,50,50,0.9)] transform hover:scale-105">
+                        <i class="fa-solid fa-ban text-2xl mb-1 drop-shadow-md"></i>
+                        <span class="text-sm font-bold uppercase tracking-wider drop-shadow-md">沒有解</span>
+                        <span id="impossible-votes" class="text-xs mt-1 font-mono font-bold">0/0</span>
                     </button>
-                    <span class="text-[12px] text-red-200 mt-2 max-w-[160px] text-center leading-tight font-bold">當所有玩家都按「沒有解」，本回合便會終止</span>
+                    <span class="text-[12px] text-red-200 mt-2 max-w-[160px] text-center leading-tight font-bold drop-shadow-md">當所有玩家都按「沒有解」，本回合便會終止</span>
                 </div>
             </div>
 
@@ -640,6 +640,14 @@
 
         // --- Rendering & Game Loop ---
         function renderRoom(data) {
+            // Check for Impossible condition inside render to catch all updates
+            if (currentUser && data.hostId === currentUser.uid && data.status === 'playing') {
+                const activeCount = data.players.filter(p => p.status === 'active').length;
+                if (data.impossibleVotes && data.impossibleVotes.length >= activeCount && activeCount > 0) {
+                    handleRoundResult('impossible', null);
+                }
+            }
+
             if (data.status === 'waiting') {
                 showView('waiting');
                 renderWaitingRoom(data);
@@ -973,23 +981,10 @@
                  impossibleVotes: arrayUnion(currentUser.uid)
              });
              
-             checkImpossibleCondition();
+             // Check is now done automatically via renderRoom / snapshot logic
         });
 
-        async function checkImpossibleCondition() {
-            if (roomState.hostId === currentUser.uid) {
-                const activePlayers = roomState.players.filter(p => p.status === 'active');
-                if (roomState.impossibleVotes.length + 1 >= activePlayers.length) { 
-                    const rRef = getRoomRef(currentRoomId);
-                    const snap = await getDoc(rRef);
-                    const d = snap.data();
-                    const activeCount = d.players.filter(p => p.status === 'active').length;
-                    if (d.impossibleVotes.length >= activeCount) {
-                        handleRoundResult('impossible', null);
-                    }
-                }
-            }
-        }
+        // Removed checkImpossibleCondition function as it's now integrated into renderRoom for safety
 
         // --- Calculator Logic (Fix 2: History & Backspace) ---
         window.game = {
