@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>彩天合60挑戰賽 - E-Sports Edition</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome CDN for icons (Crown, Check, Cross) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+        /* 使用 Inter 字體 */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+
+        :root {
+            --color-bg-dark: #00001a; /* Very dark blue */
+            --color-primary: #0f172a; /* Slate 900 */
+            --color-secondary: #1e3a8a; /* Indigo 900 */
+            --color-highlight: #facc15; /* Yellow 400 - Gold */
+            --color-error: #dc2626; /* Red 600 */
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--color-bg-dark);
+            color: white;
+            /* 放射狀漸層背景 */
+            background-image: radial-gradient(circle at center, #080a22 0%, #00001a 100%);
+            min-height: 10vh;
+        }
+
+        /* glowing border utility */
+        .glow-border {
+            box-shadow: 0 0 5px var(--color-highlight), 0 0 10px var(--color-highlight) inset;
+            border-color: var(--color-highlight);
+        }
+
+        /* 搶答按鈕脈衝動畫 */
+        .pulse-btn {
+            animation: pulse-glow 1.5s infinite;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% {
+                box-shadow: 0 0 10px rgba(250, 202, 21, 0.6), 0 0 20px rgba(250, 202, 21, 0.3);
+            }
+            50% {
+                box-shadow: 0 0 20px rgba(250, 202, 21, 1), 0 0 30px rgba(250, 202, 21, 0.5);
+            }
+        }
+
+        /* 計時器進度條 */
+        #timer-progress-bar {
+            height: 100%;
+            transition: width 0.5s linear, background-color 0.5s;
+        }
+
+        /* 卡牌樣式 */
+        .card {
+            background-color: #f87171; /* Red for poker cards */
+            border: 4px solid white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+            transition: transform 0.2s, opacity 0.2s;
+            cursor: pointer;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 12px rgba(0, 0, 0, 0.7);
+        }
+
+        .card.used {
+            opacity: 0.5;
+            transform: scale(0.9);
+            cursor: default;
+        }
+        
+        /* Action Replay 動畫樣式 */
+        #replay-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 50;
+            background-color: rgba(0, 0, 0, 0.95);
+            display: none; /* Controlled by JS */
+        }
+
+        /* 算式打字機效果 */
+        .formula-char {
+            display: inline-block;
+            opacity: 0;
+            animation: fadeIn 0.1s forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.5); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* 印章動畫 */
+        .stamp {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.1) rotate(0deg);
+            opacity: 0;
+            font-size: 5rem;
+            font-weight: 900;
+            padding: 1rem 3rem;
+            border: 10px solid;
+            border-radius: 10px;
+            animation: stamp-drop 0.5s ease-out forwards 0.5s; /* 延遲0.5s後開始 */
+        }
+
+        .stamp.correct {
+            color: #10b981; /* Emerald 500 */
+            border-color: #10b981;
+        }
+
+        .stamp.wrong {
+            color: #ef4444; /* Red 500 */
+            border-color: #ef4444;
+        }
+
+        @keyframes stamp-drop {
+            0% { transform: translate(-50%, -50%) scale(0.1) rotate(0deg); opacity: 0; }
+            80% { transform: translate(-50%, -50%) scale(1.1) rotate(-10deg); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1) rotate(-8deg); opacity: 1; }
+        }
+
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection, query, where, getDocs, runTransaction, arrayUnion, arrayRemove, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // --- Global Variables and Firebase Initialization ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let app = null;
+        let db = null;
+        let auth = null;
+        let userId = null;
+        let userName = `Player_${Math.random().toString(36).substring(2, 8)}`; // Default random name
+
+        // Game State (Local Mirror)
+        const gameState = {
+            currentRoomId: null,
+            room: null,
+            timerInterval: null,
+            quizTimerInterval: null,
+            secondsLeft: 60,
+            quizSecondsLeft: 25,
+            isAuthReady: false,
+            currentFormula: [], // [{type: 'number', value: 5, cardIndex: 0}, {type: 'operator', value: '+'}]
+            usedCardIndexes: new Set(),
+        };
+
+        const MAX_PLAYERS = 6;
+        const INITIAL_SCORE = 2;
+        const WIN_SCORE = 4;
+        
+        // --- FIX: Correct path to ensure collection reference has an odd number of segments ---
+        const ROOMS_COLLECTION_PATH = `/artifacts/${appId}/public/data/challenge60_rooms`;
+
+        // Utility to get Firestore path
+        const getRoomsCollectionRef = () => collection(db, ROOMS_COLLECTION_PATH);
+        const getRoomDocRef = (roomId) => doc(db, ROOMS_COLLECTION_PATH, roomId);
+
+        // --- Core Functions ---
+
+        /**
+         * Converts the current formula array into a string for evaluation.
+         * @returns {string} The parsable mathematical string.
+         */
+        function formulaArrayToString() {
+            return gameState.currentFormula.map(item => item.value).join('');
+        }
+
+        /**
+         * Evaluates a mathematical expression string.
+         * @param {string} formula
+         * @returns {number | null} The result or null if invalid.
+         */
+        function evaluateFormula(formula) {
+            try {
+                // Basic check to ensure it contains only valid characters and not empty
+                if (!formula || formula.match(/[^\d\+\-\*\/\(\)\.]/)) return null;
+
+                // Simple eval is sufficient for this controlled environment (no external input)
+                const result = new Function('return ' + formula)();
+                return isFinite(result) ? result : null;
+            } catch (e) {
+                console.error("Formula evaluation failed:", e);
+                return null;
+            }
+        }
+
+        /**
+         * Check if the submitted formula uses all 5 cards exactly once.
+         * @returns {boolean}
+         */
+        function checkCardUsage() {
+            return gameState.usedCardIndexes.size === 5;
+        }
+
+        /**
+         * Resets the local formula builder state.
+         */
+        function resetFormulaBuilder() {
+            gameState.currentFormula = [];
+            gameState.usedCardIndexes = new Set();
+            updateFormulaDisplay();
+        }
+
+        /**
+         * Renders the current formula in the display area.
+         */
+        function updateFormulaDisplay() {
+            const display = document.getElementById('formula-display');
+            if (display) {
+                display.innerHTML = gameState.currentFormula.map(item => {
+                    const color = item.type === 'number' ? 'text-white' : 'text-yellow-400';
+                    return `<span class="px-1 ${color} text-3xl font-bold">${item.value}</span>`;
+                }).join('');
+
+                // Update card button states
+                if (gameState.room && gameState.room.currentRound) {
+                    gameState.room.currentRound.cards.forEach((cardValue, index) => {
+                        const cardElement = document.getElementById(`card-${index}`);
+                        if (cardElement) {
+                            if (gameState.usedCardIndexes.has(index)) {
+                                cardElement.classList.add('used');
+                            } else {
+                                cardElement.classList.remove('used');
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+        /**
+         * Attempts to add an item (number or operator) to the formula.
+         * @param {string} value - The value to add.
+         * @param {string} type - 'number' or 'operator'.
+         * @param {number} [cardIndex] - Only for numbers, the index of the card used.
+         */
+        function addToFormula(value, type, cardIndex = null) {
+            if (!gameState.room || gameState.room.currentRound?.quizzingPlayerId !== userId) return;
+
+            const lastItem = gameState.currentFormula[gameState.currentFormula.length - 1];
+
+            if (type === 'number') {
+                if (gameState.usedCardIndexes.has(cardIndex)) return; // Already used
+                if (lastItem && lastItem.type === 'number') return; // Cannot place number after number
+
+                gameState.usedCardIndexes.add(cardIndex);
+                gameState.currentFormula.push({ type, value: String(value), cardIndex });
+
+            } else if (type === 'operator') {
+                // Prevent starting with binary operators, or placing operator after operator
+                if (gameState.currentFormula.length === 0 && ['+', '-', '*', '/'].includes(value)) return;
+                if (lastItem && lastItem.type === 'operator' && value !== '(' && value !== ')') return;
+
+                gameState.currentFormula.push({ type, value });
+            }
+
+            updateFormulaDisplay();
+        }
+
+        /**
+         * Undo the last action.
+         */
+        function undoFormula() {
+            if (!gameState.room || gameState.room.currentRound?.quizzingPlayerId !== userId) return;
+
+            const lastItem = gameState.currentFormula.pop();
+            if (lastItem && lastItem.type === 'number') {
+                gameState.usedCardIndexes.delete(lastItem.cardIndex);
+            }
+            updateFormulaDisplay();
+        }
+
+        // --- Firebase/Auth/Data Initialization ---
+
+        async function initFirebase() {
+            try {
+                if (Object.keys(firebaseConfig).length === 0) {
+                    console.error("Firebase config is empty. Cannot initialize.");
+                    document.getElementById('app').innerHTML = '<div class="text-center p-8 text-red-500">Firebase 配置錯誤。</div>';
+                    return;
+                }
+                
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Sign in logic
+                await new Promise(resolve => {
+                    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+                        if (!user) {
+                            if (initialAuthToken) {
+                                await signInWithCustomToken(auth, initialAuthToken);
+                            } else {
+                                await signInAnonymously(auth);
+                            }
+                        }
+                        userId = auth.currentUser?.uid;
+                        if (!userId) {
+                            console.error("Failed to get User ID after sign-in.");
+                            // Fallback for environment where auth might not work perfectly
+                            userId = crypto.randomUUID();
+                        }
+                        console.log(`User ID: ${userId}`);
+                        gameState.isAuthReady = true;
+                        unsubscribe();
+                        resolve();
+                    });
+                });
+                
+                document.getElementById('user-id-display').textContent = `您的ID: ${userId}`;
+                renderApp();
+                
+            } catch (error) {
+                console.error("Firebase Initialization Error:", error);
+            }
+        }
+
+
+        // --- UI Rendering Functions ---
+
+        /**
+         * Main render function based on current state.
+         */
+        function renderApp() {
+            if (!gameState.isAuthReady) {
+                document.getElementById('app').innerHTML = '<div class="text-center text-xl p-8"><i class="fas fa-spinner fa-spin mr-2"></i>連線至競技場...</div>';
+                return;
+            }
+
+            if (!gameState.currentRoomId) {
+                renderLobby();
+            } else if (gameState.room) {
+                if (gameState.room.status === 'in_game' || gameState.room.status === 'ready') {
+                    renderGameScreen();
+                } else {
+                    renderWaitingRoom();
+                }
+            }
+        }
+
+        /**
+         * Renders the room list and creation interface.
+         */
+        async function renderLobby() {
+            const appDiv = document.getElementById('app');
+            appDiv.innerHTML = `
+                <div class="max-w-4xl mx-auto bg-slate-900 p-6 sm:p-10 rounded-xl shadow-2xl border border-indigo-900">
+                    <h1 class="text-3xl font-extrabold text-center text-yellow-400 mb-6">彩天合60挑戰賽 競技場</h1>
+                    <div class="mb-8">
+                        <h2 class="text-2xl font-semibold mb-3 text-indigo-300">建立新的遊戲房間</h2>
+                        <input type="text" id="room-name-input" placeholder="輸入房間名稱" class="w-full p-3 mb-3 bg-slate-800 border border-indigo-700 rounded-lg focus:ring-yellow-400 focus:border-yellow-400 transition">
+                        <input type="text" id="password-input" placeholder="密碼 (可選)" class="w-full p-3 mb-4 bg-slate-800 border border-indigo-700 rounded-lg focus:ring-yellow-400 focus:border-yellow-400 transition">
+                        <button onclick="handleCreateRoom()" class="w-full py-3 bg-yellow-600 hover:bg-yellow-500 text-slate-900 font-bold rounded-lg transition transform hover:scale-[1.01] shadow-lg">
+                            <i class="fas fa-plus mr-2"></i> 建立房間
+                        </button>
+                    </div>
+
+                    <h2 class="text-2xl font-semibold mb-4 text-indigo-300 border-b border-indigo-700 pb-2">可用房間列表</h2>
+                    <div id="room-list" class="space-y-3">
+                        <p class="text-center text-slate-400">載入中...</p>
+                    </div>
+                </div>
+            `;
+            
+            // Fetch and display rooms
+            const q = query(getRoomsCollectionRef(), where("status", "!=", "finished"));
+            const roomListElement = document.getElementById('room-list');
+            try {
+                const querySnapshot = await getDocs(q);
+                if (querySnapshot.empty) {
+                    roomListElement.innerHTML = `<p class="text-center text-slate-400 py-4">目前沒有開放的房間。</p>`;
+                    return;
+                }
+
+                roomListElement.innerHTML = '';
+                querySnapshot.forEach((doc) => {
+                    const roomData = doc.data();
+                    const roomId = doc.id;
+                    const playerCount = Object.keys(roomData.players || {}).length;
+                    const playerNames = Object.values(roomData.players || {}).map(p => p.name).join(', ');
+
+                    roomListElement.innerHTML += `
+                        <div class="flex items-center justify-between p-4 bg-slate-800 rounded-xl hover:bg-slate-700 transition duration-150 border-l-4 border-yellow-400">
+                            <div>
+                                <h3 class="font-bold text-xl text-white">${roomData.name}</h3>
+                                <p class="text-sm text-slate-400">主持人: ${roomData.players[roomData.hostId]?.name || '未知'}</p>
+                                <p class="text-xs text-slate-500">成員: ${playerNames}</p>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <span class="text-yellow-400 font-bold">${playerCount}/${MAX_PLAYERS}</span>
+                                <button onclick="handleJoinRoom('${roomId}')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold transition">
+                                    加入
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+            } catch (e) {
+                console.error("Error fetching rooms:", e);
+                roomListElement.innerHTML = `<p class="text-center text-red-400 py-4">載入房間時發生錯誤。</p>`;
+            }
+        }
+
+        /**
+         * Renders the waiting room (lobby before game start).
+         */
+        function renderWaitingRoom() {
+            const room = gameState.room;
+            const isHost = room.hostId === userId;
+            const myPlayer = room.players[userId] || {};
+            const allReady = Object.values(room.players).every(p => p.isReady);
+            const playerCount = Object.keys(room.players).length;
+
+            document.getElementById('app').innerHTML = `
+                <div class="max-w-4xl mx-auto bg-slate-900 p-6 sm:p-10 rounded-xl shadow-2xl border border-indigo-900">
+                    <h1 class="text-3xl font-extrabold text-center text-yellow-400 mb-4">房間: ${room.name} (${room.status === 'ready' ? '準備中' : '等待中'})</h1>
+                    <p class="text-center text-indigo-300 mb-6">主持人: ${room.players[room.hostId]?.name || '未知'}</p>
+
+                    <div class="space-y-3 mb-8">
+                        <h2 class="text-xl font-semibold text-indigo-300 border-b border-indigo-700 pb-2">玩家列表 (${playerCount}/${MAX_PLAYERS})</h2>
+                        ${Object.values(room.players).map(p => `
+                            <div class="flex items-center justify-between p-3 bg-slate-800 rounded-lg border-l-4 ${p.isReady ? 'border-green-400' : 'border-red-400'}">
+                                <span class="font-medium text-white">${p.name} ${p.isHost ? '(主持)' : ''}</span>
+                                <span class="text-sm ${p.isReady ? 'text-green-400' : 'text-red-400'}">${p.isReady ? '已準備' : '未準備'}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    ${!myPlayer.isReady ? `
+                        <button onclick="handleSetReady(true)" class="w-full py-4 bg-green-600 hover:bg-green-500 text-white font-bold rounded-lg transition transform hover:scale-[1.01] shadow-lg text-xl">
+                            按下準備
+                        </button>
+                    ` : `
+                        <button onclick="handleSetReady(false)" class="w-full py-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition shadow-lg text-xl">
+                            取消準備
+                        </button>
+                    `}
+
+                    ${isHost && allReady && playerCount >= 1 ? `
+                        <button onclick="handleStartGame()" class="w-full py-4 mt-4 bg-yellow-600 hover:bg-yellow-500 text-slate-900 font-bold rounded-lg transition transform hover:scale-[1.02] shadow-xl text-xl">
+                            <i class="fas fa-flag-checkered mr-2"></i> 主持人開始遊戲
+                        </button>
+                    ` : isHost ? `
+                        <p class="text-center mt-4 text-slate-400">等待所有玩家準備 (${Object.values(room.players).filter(p => p.isReady).length}/${playerCount})</p>
+                    ` : ''}
+
+                    <button onclick="handleLeaveRoom()" class="w-full py-2 mt-4 text-slate-400 hover:text-red-400 transition text-sm">離開房間</button>
+                </div>
+            `;
+        }
+
+        /**
+         * Renders the main game screen.
+         */
+        function renderGameScreen() {
+            const room = gameState.room;
+            if (!room || room.status !== 'in_game' || !room.currentRound) {
+                 document.getElementById('app').innerHTML = '<div class="text-center text-xl p-8 text-red-500">遊戲狀態錯誤，請重新整理。</div>';
+                return;
+            }
+
+            const currentRound = room.currentRound;
+            const isQuizzing = currentRound.quizzingPlayerId !== null;
+            const isMyTurn = currentRound.quizzingPlayerId === userId;
+            const myPlayer = room.players[userId];
+
+            // Sort players by score (descending)
+            const sortedPlayers = Object.values(room.players).sort((a, b) => b.score - a.score);
+            // Ensure player data has an id for sorting
+            Object.keys(room.players).forEach(id => room.players[id].id = id);
+
+            const leaderId = sortedPlayers[0]?.id; 
+
+            document.getElementById('app').innerHTML = `
+                <div class="max-w-6xl mx-auto">
+                    <h1 class="text-4xl font-extrabold text-center text-yellow-400 mb-6">${room.name} - 第 ${currentRound.roundNumber} 回合</h1>
+                    
+                    <div class="flex flex-col lg:flex-row gap-8">
+                        
+                        <!-- 玩家分數列表 (左側) -->
+                        <div class="lg:w-1/4 bg-slate-900 p-4 rounded-xl shadow-2xl border border-indigo-900">
+                            <h2 class="text-xl font-semibold mb-3 text-indigo-300 border-b border-indigo-700 pb-2">玩家分數 (目標: ${WIN_SCORE}分)</h2>
+                            <div class="space-y-3">
+                                ${sortedPlayers.map(p => {
+                                    const isLeader = p.id === leaderId;
+                                    const isMe = p.id === userId;
+                                    const scoreColor = p.score <= 0 ? 'text-red-500' : p.score >= WIN_SCORE ? 'text-green-400' : 'text-white';
+                                    const statusClass = p.status === 'out' ? 'opacity-50 line-through' : '';
+                                    return `
+                                        <div class="flex items-center justify-between p-3 rounded-lg ${isMe ? 'bg-indigo-800' : 'bg-slate-800'} ${isLeader ? 'glow-border' : ''} ${statusClass}">
+                                            <div class="font-bold flex items-center">
+                                                ${isLeader ? '<i class="fas fa-crown text-yellow-400 mr-2"></i>' : ''}
+                                                <span class="${isMe ? 'text-yellow-400' : 'text-white'}">${p.name}</span>
+                                            </div>
+                                            <span class="text-xl font-extrabold ${scoreColor}">${p.score} 分</span>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+
+                        <!-- 遊戲主區 (右側) -->
+                        <div class="lg:w-3/4 space-y-6">
+
+                            <!-- 計時器欄 -->
+                            <div class="bg-slate-950 p-4 rounded-xl shadow-inner border border-yellow-400/50">
+                                <div class="flex justify-between items-center mb-2">
+                                    <h3 class="text-lg font-bold text-yellow-400">
+                                        ${isQuizzing ? `答題中 (${room.players[currentRound.quizzingPlayerId]?.name || '未知'})` : '回合計時'}
+                                    </h3>
+                                    <span id="timer-display" class="text-4xl font-mono font-extrabold ${isQuizzing ? 'text-red-400' : 'text-yellow-400'}">--</span>
+                                </div>
+                                <div class="h-4 bg-slate-700 rounded-full overflow-hidden">
+                                    <div id="timer-progress-bar" class="rounded-full" style="width: 100%; background-color: ${isQuizzing ? '#dc2626' : '#facc15'};"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- 卡牌區 -->
+                            <div id="card-area" class="flex justify-center gap-4 sm:gap-6 p-4 bg-slate-800 rounded-xl shadow-xl border border-indigo-700">
+                                ${currentRound.cards.map((value, index) => `
+                                    <button id="card-${index}" onclick="addToFormula(${value}, 'number', ${index})" 
+                                            class="card w-12 h-16 sm:w-20 sm:h-28 flex flex-col justify-center items-center rounded-lg text-4xl sm:text-6xl font-black ${isMyTurn ? '' : 'opacity-60 cursor-default'}">
+                                        ${value === 1 ? 'A' : value}
+                                    </button>
+                                `).join('')}
+                            </div>
+
+                            <!-- 搶答按鈕 / 答題區 -->
+                            <div id="game-controls">
+                                ${!isQuizzing ? `
+                                    <button onclick="handleRushAnswer()" ${myPlayer.status === 'out' ? 'disabled' : ''} 
+                                            class="w-full py-6 bg-yellow-600 hover:bg-yellow-500 text-slate-900 font-extrabold rounded-xl transition transform hover:scale-[1.01] shadow-2xl text-3xl pulse-btn disabled:opacity-50 disabled:cursor-not-allowed">
+                                        <i class="fas fa-bolt mr-3"></i> 搶答!
+                                    </button>
+                                    <button onclick="handleSkipVote()" class="w-full py-3 mt-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                        該題無法計算 (${currentRound.skipVotes?.length || 0}/${Object.keys(room.players).length})
+                                    </button>
+                                ` : isMyTurn ? `
+                                    <!-- 計算機介面 -->
+                                    <div class="bg-slate-900 p-6 rounded-xl shadow-2xl border-2 border-yellow-400/80 space-y-4">
+                                        <div id="formula-display" class="h-16 bg-slate-950 p-2 overflow-x-auto rounded-lg text-right text-4xl font-mono font-bold text-white border border-indigo-700">
+                                            <!-- Formula here -->
+                                        </div>
+                                        <div class="grid grid-cols-5 gap-3">
+                                            ${['+', '-', '*', '/', '(', ')', 'UNDO', 'CLEAR'].map(op => `
+                                                <button onclick="${op === 'UNDO' ? 'undoFormula()' : op === 'CLEAR' ? 'resetFormulaBuilder()' : `addToFormula('${op}', 'operator')`}"
+                                                        class="col-span-${op === 'UNDO' || op === 'CLEAR' ? '2' : '1'} py-3 bg-indigo-700 hover:bg-indigo-600 text-white font-bold rounded-lg transition text-xl">
+                                                    ${op}
+                                                </button>
+                                            `).join('')}
+                                        </div>
+                                        <button onclick="handleSubmitFormula()" class="w-full py-4 bg-green-600 hover:bg-green-500 text-slate-900 font-extrabold rounded-lg transition text-2xl">
+                                            提交答案 = 60
+                                        </button>
+                                    </div>
+                                ` : `
+                                    <div class="bg-slate-900 p-6 rounded-xl shadow-inner border border-red-500/80 text-center">
+                                        <h3 class="text-2xl font-bold text-red-400">
+                                            ${room.players[currentRound.quizzingPlayerId]?.name || '某位玩家'} 正在作答中...
+                                        </h3>
+                                        <p class="text-yellow-400 mt-2">請等待 ${currentRound.quizzingPlayerId === userId ? '您自己' : '他們'} 提交答案。</p>
+                                    </div>
+                                `}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            
+            // Re-apply local formula state to UI if it's the player's turn
+            if (isMyTurn) {
+                updateFormulaDisplay();
+            }
+
+            // Start or stop local timers
+            updateLocalTimers();
+        }
+
+        /**
+         * Renders the Action Replay screen.
+         * @param {object} roundData - The completed round data.
+         */
+        function renderReplayScreen(roundData) {
+            const result = roundData.isCorrect === true ? '正確' : roundData.isCorrect === false ? '錯誤' : '超時/無解';
+            const stampClass = roundData.isCorrect === true ? 'correct' : 'wrong';
+            const solverName = gameState.room.players[roundData.solverId]?.name || '無人';
+            const formulaDisplay = roundData.formula || 'N/A';
+            const answerDisplay = roundData.answer === 60 ? '60' : (roundData.answer !== null ? roundData.answer : '?');
+
+            document.getElementById('replay-screen').style.display = 'flex';
+            document.getElementById('replay-screen').innerHTML = `
+                <div class="absolute inset-0 flex flex-col items-center justify-center space-y-8 p-4">
+                    <h2 class="text-5xl font-extrabold text-yellow-400 animate-pulse">精彩重播 (ACTION REPLAY)</h2>
+                    <h3 class="text-3xl text-indigo-300">解題者: ${solverName}</h3>
+
+                    <!-- 卡牌區 (置中) -->
+                    <div class="flex justify-center gap-6 p-4 bg-slate-900/50 rounded-xl">
+                        ${roundData.cards.map((value, index) => `
+                            <div class="card w-24 h-32 flex flex-col justify-center items-center rounded-lg text-7xl font-black border-yellow-400/80">
+                                ${value === 1 ? 'A' : value}
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <!-- 算式展示區 -->
+                    <div id="replay-formula" class="text-6xl font-mono font-extrabold text-white h-20">
+                        <!-- Dynamic formula typing -->
+                    </div>
+                    
+                    <div class="text-4xl font-bold text-indigo-300">結果: <span class="${stampClass === 'correct' ? 'text-green-400' : 'text-red-400'}">${answerDisplay}</span></div>
+
+                    <!-- 印章動畫 -->
+                    <div id="replay-stamp" class="stamp ${stampClass}" style="opacity: 0;">
+                        ${roundData.isCorrect === true ? 'ANSWER CORRECT' : 'WRONG / TIMEOUT'}
+                    </div>
+
+                    <p class="text-slate-400 text-lg mt-6">準備開始下一回合...</p>
+                </div>
+            `;
+
+            // Start typing animation
+            const formulaElement = document.getElementById('replay-formula');
+            let formulaHtml = '';
+            for (let i = 0; i < formulaDisplay.length; i++) {
+                const char = formulaDisplay[i];
+                const charType = char.match(/\d/) ? 'number' : 'operator';
+                const color = charType === 'number' ? 'text-white' : 'text-yellow-400';
+                formulaHtml += `<span class="formula-char ${color}" style="animation-delay: ${i * 0.1}s">${char}</span>`;
+            }
+            formulaElement.innerHTML = formulaHtml;
+            
+            // Show stamp after a delay
+            setTimeout(() => {
+                document.getElementById('replay-stamp').style.opacity = 1;
+            }, formulaDisplay.length * 100 + 500); // Wait for typing + 0.5s
+
+            // Auto-advance to next round after 4 seconds
+            setTimeout(() => {
+                document.getElementById('replay-screen').style.display = 'none';
+                if (gameState.room.status === 'finished') {
+                    renderGameOverScreen();
+                } else {
+                    renderGameScreen();
+                }
+            }, 4000);
+        }
+
+        /**
+         * Renders the game over screen.
+         */
+        function renderGameOverScreen() {
+            const room = gameState.room;
+            const sortedPlayers = Object.values(room.players).sort((a, b) => b.score - a.score);
+            const winner = sortedPlayers[0];
+
+            document.getElementById('app').innerHTML = `
+                <div class="max-w-4xl mx-auto bg-slate-900 p-8 sm:p-12 rounded-xl shadow-2xl border border-yellow-400 glow-border text-center">
+                    <i class="fas fa-trophy text-yellow-400 text-8xl mb-4"></i>
+                    <h1 class="text-5xl font-extrabold text-yellow-400 mb-2">挑戰賽結束!</h1>
+                    <h2 class="text-4xl text-white mb-8">${winner.name} 獲勝!</h2>
+                    
+                    <div class="space-y-3 mb-10 text-left">
+                        <h3 class="text-2xl font-semibold text-indigo-300 border-b border-indigo-700 pb-2">最終分數排名</h3>
+                        ${sortedPlayers.map((p, index) => `
+                            <div class="flex items-center justify-between p-3 bg-slate-800 rounded-lg ${index === 0 ? 'glow-border' : ''}">
+                                <div class="font-bold flex items-center">
+                                    <span class="mr-3 text-yellow-400">${index + 1}.</span>
+                                    <span class="text-white">${p.name} ${p.isHost ? '(主持)' : ''}</span>
+                                </div>
+                                <span class="text-2xl font-extrabold text-white">${p.score} 分</span>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <button onclick="handleLeaveRoom(true)" class="py-3 px-8 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition text-xl">
+                        返回競技場大廳
+                    </button>
+                </div>
+            `;
+        }
+
+
+        // --- Firestore Interaction Handlers (Public API) ---
+
+        window.handleCreateRoom = async function() {
+            const roomName = document.getElementById('room-name-input').value.trim();
+            const password = document.getElementById('password-input').value.trim();
+            if (!roomName) { alertMsg('請輸入房間名稱'); return; }
+
+            const newRoomId = crypto.randomUUID();
+            const roomData = {
+                name: roomName,
+                password: password || null,
+                hostId: userId,
+                status: 'waiting',
+                players: {
+                    [userId]: { name: userName, score: INITIAL_SCORE, isReady: false, isHost: true, status: 'playing' }
+                },
+                currentRound: null,
+                lastUpdated: Date.now()
+            };
+
+            try {
+                await setDoc(getRoomDocRef(newRoomId), roomData);
+                joinRoom(newRoomId);
+            } catch (e) {
+                console.error("Error creating room:", e);
+                alertMsg('建立房間失敗。');
+            }
+        }
+
+        window.handleJoinRoom = async function(roomId) {
+            // In a real app, you would prompt for a password here if needed.
+            // For simplicity, we skip password check.
+            try {
+                const roomRef = getRoomDocRef(roomId);
+                await runTransaction(db, async (transaction) => {
+                    const roomDoc = await transaction.get(roomRef);
+                    if (!roomDoc.exists()) throw new Error("房間不存在。");
+
+                    const room = roomDoc.data();
+                    const players = room.players || {};
+
+                    if (Object.keys(players).length >= MAX_PLAYERS) throw new Error("房間已滿。");
+                    if (room.status !== 'waiting' && room.status !== 'ready') throw new Error("遊戲已開始。");
+                    
+                    if (!players[userId]) {
+                        players[userId] = { name: userName, score: INITIAL_SCORE, isReady: false, isHost: false, status: 'playing' };
+                        transaction.update(roomRef, { players, lastUpdated: Date.now() });
+                    }
+                });
+                joinRoom(roomId);
+            } catch (e) {
+                console.error("Error joining room:", e);
+                alertMsg(e.message || '加入房間失敗。');
+            }
+        }
+
+        window.handleLeaveRoom = async function(isGameOver = false) {
+            const roomId = gameState.currentRoomId;
+            if (!roomId) return;
+            
+            try {
+                const roomRef = getRoomDocRef(roomId);
+                await runTransaction(db, async (transaction) => {
+                    const roomDoc = await transaction.get(roomRef);
+                    if (!roomDoc.exists()) return;
+
+                    const room = roomDoc.data();
+                    let players = room.players || {};
+                    
+                    if (players[userId]) {
+                        delete players[userId];
+                        
+                        if (Object.keys(players).length === 0) {
+                            // Delete room if last player leaves
+                            transaction.delete(roomRef);
+                        } else if (room.hostId === userId) {
+                            // Assign new host if host leaves
+                            const newHostId = Object.keys(players)[0];
+                            players[newHostId].isHost = true;
+                            transaction.update(roomRef, { players, hostId: newHostId, lastUpdated: Date.now() });
+                        } else {
+                            transaction.update(roomRef, { players, lastUpdated: Date.now() });
+                        }
+                    }
+                });
+                
+                // Cleanup local state
+                gameState.currentRoomId = null;
+                gameState.room = null;
+                stopLocalTimers();
+                renderLobby();
+            } catch (e) {
+                console.error("Error leaving room:", e);
+                alertMsg('離開房間失敗。');
+            }
+        }
+
+        window.handleSetReady = async function(isReady) {
+            const roomId = gameState.currentRoomId;
+            if (!roomId) return;
+
+            try {
+                const updatePath = `players.${userId}.isReady`;
+                await updateDoc(getRoomDocRef(roomId), { 
+                    [updatePath]: isReady,
+                    status: isReady ? 'ready' : 'waiting', // Simple status change based on *my* readiness
+                    lastUpdated: Date.now()
+                });
+            } catch (e) {
+                console.error("Error setting ready status:", e);
+                alertMsg('設定準備狀態失敗。');
+            }
+        }
+
+        window.handleStartGame = async function() {
+            const roomId = gameState.currentRoomId;
+            if (!roomId || gameState.room.hostId !== userId) return;
+
+            const room = gameState.room;
+            const playerCount = Object.keys(room.players).length;
+            const readyCount = Object.values(room.players).filter(p => p.isReady).length;
+
+            if (playerCount === 0 || playerCount !== readyCount) {
+                alertMsg('所有玩家必須準備就緒才能開始。');
+                return;
+            }
+
+            try {
+                // Initial game start: change status and start first round
+                await updateDoc(getRoomDocRef(roomId), {
+                    status: 'in_game',
+                    currentRound: generateNewRound(1, room.players),
+                    lastUpdated: Date.now()
+                });
+            } catch (e) {
+                console.error("Error starting game:", e);
+                alertMsg('開始遊戲失敗。');
+            }
+        }
+
+        window.handleRushAnswer = async function() {
+            const roomId = gameState.currentRoomId;
+            if (!roomId || gameState.room.currentRound.quizzingPlayerId !== null || gameState.room.currentRound.status !== 'open') return;
+
+            try {
+                const roomRef = getRoomDocRef(roomId);
+                await runTransaction(db, async (transaction) => {
+                    const roomDoc = await transaction.get(roomRef);
+                    if (!roomDoc.exists()) throw new Error("房間不存在。");
+
+                    const room = roomDoc.data();
+                    const round = room.currentRound;
+
+                    if (round.quizzingPlayerId !== null || round.status !== 'open') throw new Error("已被搶答或回合已結束。");
+
+                    // Start the quizzing phase
+                    transaction.update(roomRef, {
+                        'currentRound.quizzingPlayerId': userId,
+                        'currentRound.quizStartTime': Date.now(),
+                        'currentRound.status': 'quizzing',
+                        lastUpdated: Date.now()
+                    });
+                });
+                // Local reset for the calculator interface
+                resetFormulaBuilder();
+
+            } catch (e) {
+                console.error("Error rushing answer:", e);
+                alertMsg(e.message || '搶答失敗。');
+            }
+        }
+
+        window.handleSubmitFormula = async function() {
+            const roomId = gameState.currentRoomId;
+            const round = gameState.room.currentRound;
+            if (!roomId || round.quizzingPlayerId !== userId) return;
+
+            const formulaString = formulaArrayToString();
+            const result = evaluateFormula(formulaString);
+            const isAllCardsUsed = checkCardUsage();
+            const isCorrect = isAllCardsUsed && result === 60;
+            
+            if (!isAllCardsUsed) {
+                alertMsg('必須使用所有 5 張卡牌。');
+                return;
+            }
+            if (!isCorrect && result === null) {
+                alertMsg('算式不正確或格式錯誤。');
+                return;
+            }
+
+            // Immediately stop local timer to prevent timeout race condition
+            stopLocalTimers();
+
+            try {
+                await finalizeRound(roomId, {
+                    solverId: userId,
+                    formula: formulaString,
+                    answer: result,
+                    isCorrect: isCorrect,
+                    type: isCorrect ? 'solved' : 'wrong'
+                });
+            } catch (e) {
+                console.error("Error submitting formula:", e);
+                alertMsg('提交失敗。');
+            }
+        }
+
+        window.handleSkipVote = async function() {
+            const roomId = gameState.currentRoomId;
+            const round = gameState.room.currentRound;
+            if (!roomId || round.status !== 'open') return;
+
+            try {
+                const roomRef = getRoomDocRef(roomId);
+                await runTransaction(db, async (transaction) => {
+                    const roomDoc = await transaction.get(roomRef);
+                    if (!roomDoc.exists()) throw new Error("房間不存在。");
+                    const room = roomDoc.data();
+                    const currentVotes = room.currentRound.skipVotes || [];
+
+                    if (!currentVotes.includes(userId)) {
+                        currentVotes.push(userId);
+                        const playerCount = Object.keys(room.players).length;
+
+                        let updateData = { 'currentRound.skipVotes': currentVotes };
+
+                        if (currentVotes.length >= playerCount) {
+                            // All players voted to skip -> finalize round as skip
+                            updateData['currentRound.status'] = 'skip_vote';
+                        }
+                        
+                        transaction.update(roomRef, updateData);
+                    }
+                });
+
+            } catch (e) {
+                console.error("Error voting to skip:", e);
+                alertMsg('投票失敗。');
+            }
+        }
+        
+        /**
+         * Generic alert message utility (instead of window.alert)
+         */
+        function alertMsg(message) {
+            console.warn(message);
+            // Simple visual alert (can be upgraded to a modal)
+            const el = document.getElementById('formula-display') || document.getElementById('app');
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'fixed top-4 right-4 bg-red-700 text-white p-3 rounded-lg shadow-xl z-[100] transition transform animate-pulse';
+            alertDiv.textContent = message;
+            document.body.appendChild(alertDiv);
+            setTimeout(() => { document.body.removeChild(alertDiv); }, 3000);
+        }
+
+        // --- Game Logic Functions ---
+
+        /**
+         * Generates a new round object.
+         * @param {number} roundNumber
+         * @param {object} players - Current players list.
+         * @returns {object}
+         */
+        function generateNewRound(roundNumber, players) {
+            const deck = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]; // A=1 to 10
+            const cards = [];
+            for (let i = 0; i < 5; i++) {
+                const randomIndex = Math.floor(Math.random() * deck.length);
+                cards.push(deck[randomIndex]);
+            }
+            
+            // Filter out 'out' players for scoring
+            const playingPlayerIds = Object.keys(players).filter(id => players[id].status === 'playing');
+
+            return {
+                roundNumber,
+                cards,
+                startTime: Date.now(),
+                quizzingPlayerId: null,
+                quizStartTime: null,
+                formula: null,
+                answer: null,
+                isCorrect: null,
+                status: 'open',
+                solverId: null,
+                skipVotes: [],
+                activePlayers: playingPlayerIds,
+            };
+        }
+
+        /**
+         * Updates scores and determines if the game ends, then starts the next round or finishes the game.
+         * @param {string} roomId
+         * @param {object} result - {solverId, formula, answer, isCorrect, type: 'solved'|'wrong'|'timeout'|'skip'}
+         */
+        async function finalizeRound(roomId, result) {
+            const roomRef = getRoomDocRef(roomId);
+            
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const roomDoc = await transaction.get(roomRef);
+                    if (!roomDoc.exists()) throw new Error("房間不存在。");
+
+                    const room = roomDoc.data();
+                    let players = room.players;
+                    let nextRoundNumber = room.currentRound.roundNumber + 1;
+                    
+                    const isSolved = result.type === 'solved';
+                    const isWrong = result.type === 'wrong' || result.type === 'timeout';
+                    
+                    if (isSolved) {
+                        // Winner gets +1
+                        players[result.solverId].score += 1;
+                    } else if (isWrong && result.solverId) {
+                        // Loser gets -1
+                        players[result.solverId].score -= 1;
+                    }
+
+                    let gameFinished = false;
+                    let activePlayersCount = 0;
+
+                    // Check for wins/losses
+                    Object.keys(players).forEach(id => {
+                        players[id].isReady = false; // Reset ready status
+                        
+                        // Check for win condition
+                        if (players[id].score >= WIN_SCORE) {
+                            gameFinished = true;
+                        }
+
+                        // Check for loss condition
+                        if (players[id].score <= 0 && players[id].status === 'playing') {
+                            players[id].status = 'out';
+                        }
+                        
+                        if (players[id].status === 'playing') {
+                            activePlayersCount++;
+                        }
+                    });
+
+                    // Check if only one player remains active or game is finished by score
+                    if (activePlayersCount <= 1 || gameFinished) {
+                        gameFinished = true;
+                    }
+
+                    const newRoomData = {
+                        players,
+                        lastUpdated: Date.now(),
+                        currentRound: {
+                            ...room.currentRound,
+                            ...result,
+                            // Ensure the status is set to 'replay' to trigger the animation
+                            status: 'replay',
+                            formula: result.formula || 'N/A', 
+                            answer: result.answer || null,
+                            isCorrect: result.isCorrect,
+                        }
+                    };
+
+                    if (gameFinished) {
+                        newRoomData.status = 'finished';
+                    }
+                    
+                    transaction.update(roomRef, newRoomData);
+
+                    // If it was a successful solve or timeout/wrong answer, prepare for next round
+                    if (!gameFinished) {
+                        // This update is separate, happens after 'replay' is shown
+                        setTimeout(async () => {
+                            try {
+                                await updateDoc(roomRef, {
+                                    currentRound: generateNewRound(nextRoundNumber, players),
+                                    lastUpdated: Date.now()
+                                });
+                            } catch(e) { console.error("Error auto-starting next round:", e); }
+                        }, 4500); // 4 seconds replay + 0.5s buffer
+                    }
+
+                });
+            } catch (e) {
+                console.error("Error finalizing round:", e);
+                alertMsg(e.message || '回合結算失敗。');
+            }
+        }
+
+
+        // --- Real-time Listener and Timer Management ---
+
+        function joinRoom(roomId) {
+            gameState.currentRoomId = roomId;
+            renderApp(); // Initial transition to loading/waiting screen
+            
+            const unsubscribe = onSnapshot(getRoomDocRef(roomId), (doc) => {
+                if (!doc.exists()) {
+                    // Room was deleted by host
+                    unsubscribe();
+                    gameState.currentRoomId = null;
+                    gameState.room = null;
+                    stopLocalTimers();
+                    alertMsg('房間已被主持人解散。');
+                    renderLobby();
+                    return;
+                }
+
+                const newRoom = doc.data();
+                const oldStatus = gameState.room?.currentRound?.status;
+                const newStatus = newRoom.currentRound?.status;
+
+                gameState.room = newRoom;
+                
+                // Check if we need to show the Action Replay
+                if (newStatus === 'replay' && oldStatus !== 'replay') {
+                    // Stop timers and show the replay screen
+                    stopLocalTimers();
+                    renderReplayScreen(newRoom.currentRound);
+                } else if (newStatus === 'solved' || newStatus === 'wrong' || newStatus === 'timeout' || newStatus === 'skip_vote') {
+                    // Handle server-side timeout/skip/solve immediately
+                    finalizeRound(roomId, {
+                        solverId: newRoom.currentRound.solverId,
+                        formula: newRoom.currentRound.formula,
+                        answer: newRoom.currentRound.answer,
+                        isCorrect: newRoom.currentRound.isCorrect,
+                        type: newStatus
+                    });
+                } else if (newRoom.status === 'in_game' || newRoom.status === 'finished') {
+                    // Regular game update or game end
+                    renderApp();
+                } else {
+                    // Lobby/Waiting room update
+                    renderApp();
+                }
+            }, (error) => {
+                console.error("Firestore Listener Error:", error);
+                // Handle error (e.g., permission denied, which might mean the room was deleted)
+                unsubscribe();
+                gameState.currentRoomId = null;
+                gameState.room = null;
+                stopLocalTimers();
+                alertMsg('與房間的連線中斷。');
+                renderLobby();
+            });
+        }
+        
+        // --- Timer Logic ---
+        function stopLocalTimers() {
+            clearInterval(gameState.timerInterval);
+            clearInterval(gameState.quizTimerInterval);
+            gameState.timerInterval = null;
+            gameState.quizTimerInterval = null;
+        }
+
+        function updateLocalTimers() {
+            const room = gameState.room;
+            if (!room || room.status !== 'in_game' || !room.currentRound) {
+                stopLocalTimers();
+                return;
+            }
+
+            const round = room.currentRound;
+            const now = Date.now();
+            const totalRoundTime = 60000; // 60 seconds
+            const totalQuizTime = 25000; // 25 seconds
+            
+            stopLocalTimers(); // Clear existing timers
+
+            if (round.status === 'open') {
+                // Main 60s timer
+                gameState.timerInterval = setInterval(() => {
+                    const elapsed = Date.now() - round.startTime;
+                    gameState.secondsLeft = Math.max(0, Math.floor((totalRoundTime - elapsed) / 1000));
+
+                    const display = document.getElementById('timer-display');
+                    const bar = document.getElementById('timer-progress-bar');
+                    if (display) display.textContent = gameState.secondsLeft.toString().padStart(2, '0');
+                    if (bar) bar.style.width = `${Math.min(100, (totalRoundTime - elapsed) / totalRoundTime * 100)}%`;
+
+                    if (elapsed >= totalRoundTime) {
+                        clearInterval(gameState.timerInterval);
+                        // Trigger server-side timeout for all players to see
+                        finalizeRound(room.currentRoomId, {
+                            solverId: null,
+                            formula: null,
+                            answer: null,
+                            isCorrect: false,
+                            type: 'timeout'
+                        });
+                    }
+                }, 100);
+            } else if (round.status === 'quizzing' && round.quizStartTime) {
+                // 25s Quiz timer
+                gameState.quizTimerInterval = setInterval(() => {
+                    const elapsed = Date.now() - round.quizStartTime;
+                    gameState.quizSecondsLeft = Math.max(0, Math.floor((totalQuizTime - elapsed) / 1000));
+
+                    const display = document.getElementById('timer-display');
+                    const bar = document.getElementById('timer-progress-bar');
+                    if (display) display.textContent = gameState.quizSecondsLeft.toString().padStart(2, '0');
+                    if (bar) bar.style.width = `${Math.min(100, (totalQuizTime - elapsed) / totalQuizTime * 100)}%`;
+
+                    if (elapsed >= totalQuizTime) {
+                        clearInterval(gameState.quizTimerInterval);
+                        // Trigger server-side timeout for the quizzing player
+                        finalizeRound(room.currentRoomId, {
+                            solverId: round.quizzingPlayerId,
+                            formula: formulaArrayToString(), // Submit current formula for replay screen
+                            answer: evaluateFormula(formulaArrayToString()),
+                            isCorrect: false,
+                            type: 'timeout'
+                        });
+                    }
+                }, 100);
+            }
+        }
+        
+        // --- Startup ---
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check and set a user name from local storage if available, otherwise use default
+            const storedName = localStorage.getItem('challenge60_userName');
+            if (storedName) {
+                userName = storedName;
+            } else {
+                 localStorage.setItem('challenge60_userName', userName);
+            }
+
+            // A prompt for user name setup (optional but good UX)
+            // You can replace this with a dedicated name input modal
+            const newName = prompt(`請輸入您的暱稱 (目前: ${userName}):`, userName);
+            if (newName && newName.trim()) {
+                userName = newName.trim();
+                localStorage.setItem('challenge60_userName', userName);
+            }
+            
+            initFirebase();
+        });
+
+        // Expose global functions for HTML access
+        window.addToFormula = addToFormula;
+        window.undoFormula = undoFormula;
+        window.resetFormulaBuilder = resetFormulaBuilder;
+    </script>
+    
+    <div id="user-id-display" class="text-xs text-slate-500 text-right mb-2"></div>
+    
+    <div id="app" class="flex justify-center items-start pt-10 min-h-[calc(100vh-60px)]">
+        <div class="text-center text-xl p-8"><i class="fas fa-spinner fa-spin mr-2"></i>連線至競技場...</div>
+    </div>
+    
+    <!-- Action Replay Overlay (Fixed position) -->
+    <div id="replay-screen" style="display: none;"></div>
+
+</body>
+</html>
